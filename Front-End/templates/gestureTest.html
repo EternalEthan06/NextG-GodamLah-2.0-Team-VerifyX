@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Modal Verification | SLP-ID</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0b0f19; /* Ultra Dark Navy */
+            color: white;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .security-container {
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+            padding: 30px;
+        }
+
+        .official-badge {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            margin-bottom: 20px; opacity: 0.7; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+        }
+
+        h1 { font-size: 24px; font-weight: 700; margin-bottom: 5px; }
+        p { color: #94a3b8; font-size: 14px; margin-bottom: 30px; }
+
+        /* --- THE SCANNER HUD --- */
+        .scanner-hud {
+            width: 320px;
+            height: 240px;
+            background: #111827;
+            border: 2px solid #374151;
+            border-radius: 12px;
+            margin: 0 auto 25px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+        }
+
+        /* WEBCAM VIDEO LAYER */
+        #webcam {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror effect */
+            z-index: 1;
+            display: none; /* Hidden until started */
+        }
+
+        .user-silhouette {
+            font-size: 140px;
+            color: #1f2937;
+            z-index: 0;
+        }
+
+        /* --- VISIBLE OVERLAYS ONLY --- */
+        .scan-overlay {
+            position: absolute; pointer-events: none; z-index: 5;
+            display: none;
+        }
+
+        /* 1. Face Grid (Visible Layer) */
+        .face-grid {
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: linear-gradient(#0ea5e9 1px, transparent 1px), linear-gradient(90deg, #0ea5e9 1px, transparent 1px);
+            background-size: 40px 40px; /* Larger grid for camera */
+            opacity: 0.2;
+        }
+
+        /* 2. Hand Zone (Visible Layer) */
+        .hand-zone {
+            bottom: 10px; right: 10px;
+            width: 80px; height: 100px;
+            border: 2px dashed #fbbf24; /* Yellow */
+            border-radius: 8px;
+            display: none;
+            align-items: center; justify-content: center;
+            color: #fbbf24;
+            font-size: 10px; text-transform: uppercase;
+            background: rgba(251, 191, 36, 0.1);
+        }
+
+        /* --- GESTURE CHALLENGE BOX --- */
+        .gesture-challenge {
+            background: #1f2937;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #374151;
+            display: none;
+            animation: slideUp 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        .gesture-icon { font-size: 40px; color: #fbbf24; margin: 10px 0; }
+        .gesture-text { font-size: 18px; font-weight: bold; color: white; }
+        .gesture-sub { font-size: 12px; color: #9ca3af; }
+
+        /* --- BUTTONS --- */
+        .btn-action {
+            background: #0ea5e9;
+            color: white;
+            border: none;
+            padding: 12px 40px;
+            border-radius: 6px;
+            font-size: 14px; font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+        }
+        .btn-action:hover { background: #0284c7; }
+        .btn-action:disabled { background: #4b5563; cursor: not-allowed; }
+
+        .status-log {
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #0ea5e9;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="security-container">
+        <div class="official-badge">
+            <img src="https://flagcdn.com/w40/my.png" alt="Malaysia" style="width: 20px; border-radius: 2px;">
+            Simultaneous Biometric Gate
+        </div>
+
+        <h1>Identity Verification</h1>
+        <p>Hold the gesture while looking at the camera.</p>
+
+        <div class="scanner-hud">
+            <video id="webcam" autoplay playsinline></video>
+            
+            <i class="fas fa-user user-silhouette"></i>
+            
+            <div class="scan-overlay face-grid" id="faceGrid"></div>
+            <div class="scan-overlay hand-zone" id="handZone">
+                <span>Analyzing<br>Gesture</span>
+            </div>
+        </div>
+
+        <div class="gesture-challenge" id="challengeBox">
+            <div class="gesture-sub">Please hold this gesture:</div>
+            <div class="gesture-icon" id="gestureIcon"><i class="fas fa-hand-paper"></i></div>
+            <div class="gesture-text" id="gestureName">Open Palm</div>
+        </div>
+
+        <button class="btn-action" id="startBtn" onclick="initCameraAndScan()">
+            Start Camera & Scan
+        </button>
+
+        <div class="status-log" id="statusLog">System Ready.</div>
+    </div>
+
+    <script>
+        const gestures = [
+            { name: "Open Palm", icon: "fa-hand-paper" },
+            { name: "Peace Sign", icon: "fa-hand-peace" },
+            { name: "Fist", icon: "fa-hand-rock" },
+            { name: "Thumbs Up", icon: "fa-thumbs-up" }
+        ];
+
+        async function initCameraAndScan() {
+            const btn = document.getElementById('startBtn');
+            const log = document.getElementById('statusLog');
+            const video = document.getElementById('webcam');
+
+            // 1. Lock UI
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> STARTING CAMERA...';
+            log.innerText = ">> REQUESTING OPTICAL FEED...";
+
+            try {
+                // 2. Request Camera Permission
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.style.display = "block"; // Show video
+                
+                // 3. Start the Simulation Sequence once camera is on
+                startSimultaneousScan();
+
+            } catch (err) {
+                console.error("Camera Error:", err);
+                log.innerText = ">> CAMERA ERROR: PERMISSION DENIED";
+                log.style.color = "red";
+                btn.innerHTML = "Camera Failed";
+            }
+        }
+
+        function startSimultaneousScan() {
+            const log = document.getElementById('statusLog');
+
+            // 1. Pick Random Gesture
+            const randomGesture = gestures[Math.floor(Math.random() * gestures.length)];
+            document.getElementById('gestureName').innerText = randomGesture.name;
+            document.getElementById('gestureIcon').innerHTML = `<i class="fas ${randomGesture.icon}"></i>`;
+            document.getElementById('challengeBox').style.display = "block";
+
+            // 2. ACTIVATE VISIBLE SCANNERS
+            document.getElementById('faceGrid').style.display = "block";
+            document.getElementById('handZone').style.display = "flex";
+
+            // 3. Update Log
+            log.innerText = ">> ACQUIRING BIOMETRIC TELEMETRY...";
+
+            // 4. Simulate Processing (3 Seconds)
+            setTimeout(() => {
+                log.innerText = ">> ANALYZING VECTORS (IRIS/FACE/HAND)...";
+                
+                setTimeout(() => {
+                    log.innerText = ">> IDENTITY CONFIRMED.";
+                    log.style.color = "#10b981"; // Green
+                    
+                    // Stop Animations & Freeze UI
+                    document.getElementById('faceGrid').style.display = "none";
+                    document.getElementById('handZone').style.borderColor = "#10b981";
+                    document.getElementById('handZone').style.color = "#10b981";
+                    document.getElementById('handZone').innerHTML = "<i class='fas fa-check'></i>";
+
+                    // Redirect
+                    setTimeout(() => {
+                        window.location.href = "/step-complete";
+                    }, 1000);
+
+                }, 1500);
+            }, 2500);
+        }
+    </script>
+</body>
+</html>

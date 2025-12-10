@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Logs | VerifyX</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --gov-blue: #003366;
+            --gov-dark: #002244;
+            --gov-gold: #dba914;
+            --bg-light: #f4f7f6;
+            --text-dark: #1f2937;
+            --text-light: #6b7280;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, sans-serif; }
+        
+        body { background-color: var(--bg-light); color: var(--text-dark); display: flex; min-height: 100vh; }
+
+        .sidebar {
+            width: 280px; background-color: white; border-right: 1px solid #e5e7eb; display: flex;
+            flex-direction: column; padding: 20px; position: fixed; height: 100%; top: 0; left: 0; z-index: 100;
+        }
+
+        .logo-area { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; color: var(--gov-blue); }
+        .logo-area i { font-size: 24px; }
+        .logo-area h2 { font-size: 18px; font-weight: 800; }
+
+        /* User Widget */
+        .user-widget {
+            background: linear-gradient(135deg, var(--gov-blue), var(--gov-dark)); color: white; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0, 51, 102, 0.2);
+        }
+        .user-avatar {
+            width: 70px; height: 70px; background-color: white; border-radius: 50%; margin: 0 auto 10px;
+            display: flex; align-items: center; justify-content: center; border: 3px solid var(--gov-gold);
+            font-size: 30px; color: var(--gov-blue);
+        }
+        .user-widget h3 { font-size: 16px; margin-bottom: 5px; }
+        .user-widget p { font-size: 12px; opacity: 0.8; margin-bottom: 15px; }
+
+        .security-badges { display: flex; justify-content: center; gap: 8px; }
+        .badge {
+            font-size: 10px; padding: 4px 8px; background: rgba(255,255,255,0.2); border-radius: 20px;
+            display: flex; align-items: center; gap: 4px;
+        }
+
+        /* Navigation */
+        .nav-links { list-style: none; flex: 1; }
+        .nav-item { margin-bottom: 5px; }
+        .nav-link {
+            display: flex; align-items: center; gap: 12px; padding: 12px 15px; text-decoration: none;
+            color: var(--text-light); border-radius: 8px; font-weight: 500; transition: all 0.2s;
+        }
+        .nav-link:hover { background-color: #eef5fc; color: var(--gov-blue); }
+        
+        /* Active State Style */
+        .nav-link.active { background-color: #eef5fc; color: var(--gov-blue); border-left: 4px solid var(--gov-blue); }
+
+        /* --- MAIN CONTENT AREA --- */
+        .main-content {
+            margin-left: 280px; flex: 1; padding: 40px; width: calc(100% - 280px);
+        }
+
+        .page-header { margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+        .page-header h1 { color: var(--gov-blue); font-size: 28px; margin-bottom: 5px; }
+        .page-header p { color: #666; font-size: 14px; }
+
+        /* LOGS TABLE STYLE */
+        .table-card {
+            background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            overflow: hidden; border: 1px solid #e5e7eb;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f8fafc; text-align: left; padding: 15px 25px; font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid #e2e8f0; }
+        td { padding: 20px 25px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background-color: #fcfcfc; }
+
+        /* Table Column Styles */
+        .org-cell { display: flex; align-items: center; gap: 15px; }
+        .org-icon { width: 40px; height: 40px; background: #eef5fc; color: var(--gov-blue); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .org-name { font-weight: 600; color: #1e293b; font-size: 15px; display: block; }
+        .access-id { font-size: 11px; color: #94a3b8; }
+        .perm-tag { display: inline-flex; align-items: center; gap: 5px; background: #f8fafc; padding: 4px 10px; border-radius: 6px; font-size: 11px; color: #475569; margin-right: 5px; margin-bottom: 5px; border: 1px solid #e2e8f0; }
+        
+        .status-badge { padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; }
+        .status-active { background: #dcfce7; color: #15803d; }
+        .status-revoked { background: #fee2e2; color: #b91c1c; }
+        .status-expired { background: #f1f5f9; color: #64748b; }
+
+        .btn-revoke { background: white; border: 1px solid var(--danger); color: var(--danger); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-revoke:hover { background: var(--danger); color: white; }
+        
+        /* Toast Notification for Feedback */
+        #toast {
+            visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center;
+            border-radius: 2px; padding: 16px; position: fixed; z-index: 1; left: 50%; bottom: 30px;
+            transform: translateX(-50%); font-size: 14px;
+        }
+        #toast.show { visibility: visible; -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
+        @-webkit-keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @-webkit-keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div class="logo-area">
+            <i class="fas fa-shield-alt"></i>
+            <h2>SLP-ID</h2>
+        </div>
+
+        <div class="user-widget">
+            <div class="user-avatar">
+                <i class="fas fa-user"></i>
+            </div>
+            <h3>{{ user.full_name }}</h3>
+            <p>ID: {{ user.mykad_number}}</p>
+            <div class="security-badges">
+                <div class="badge" title="Face Recognition Active"><i class="fas fa-face-viewfinder"></i> Face</div>
+                <div class="badge" title="Voice Auth Active"><i class="fas fa-microphone"></i> Voice</div>
+                <div class="badge" title="Encryption Active"><i class="fas fa-lock"></i> AES</div>
+            </div>
+        </div>
+
+        <ul class="nav-links">
+            <li class="nav-item">
+                <a href="{{ url_for('dashboard') }}" class="nav-link"><i class="fas fa-th-large"></i> Dashboard</a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('my_files_entry') }}" class="nav-link"><i class="fas fa-folder-open"></i> My Files</a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('share') }}" class="nav-link"><i class="fas fa-user-check"></i> Permissions (P2V)</a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('access_log') }}" class="nav-link active"><i class="fas fa-history"></i> Access Logs</a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('settings') }}" class="nav-link"><i class="fas fa-cog"></i> Settings</a>
+            </li>
+        </ul>
+
+        <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid #eee;">
+            <a href="{{ url_for('logout') }}" class="nav-link" style="color: var(--danger);"><i class="fas fa-sign-out-alt"></i> Secure Logout</a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        
+        <div class="page-header">
+            <div>
+                <h1>Access Logs & Permissions</h1>
+                <p>Audit trail of all third-party access attempts and active sessions.</p>
+            </div>
+            <div style="text-align: right;">
+                <span style="background: #e0f2fe; color: #0284c7; padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: bold;">
+                    <i class="fas fa-link"></i> Live Blockchain Feed
+                </span>
+            </div>
+        </div>
+
+        <div class="table-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">Organization</th>
+                        <th style="width: 35%;">Permissions & Context</th>
+                        <th style="width: 15%;">Access Time</th>
+                        <th style="width: 10%;">Status</th>
+                        <th style="width: 15%;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                        <tr {% if log.status == 'FAILED' or log.status == 'BLOCKED' %}style="background-color: #fff1f2;"{% endif %}>
+                            <td>
+                                <div class="org-cell">
+                                    <div class="org-icon">
+                                        {% if log.organization_name == 'System' %}
+                                            <i class="fas fa-desktop"></i>
+                                        {% elif 'Bank' in log.organization_name %}
+                                            <i class="fas fa-university"></i>
+                                        {% elif 'Rental' in log.organization_name %}
+                                            <i class="fas fa-home"></i>
+                                        {% elif 'Touch' in log.organization_name %}
+                                            <i class="fas fa-wallet"></i>
+                                        {% elif 'LHDN' in log.organization_name %}
+                                            <i class="fas fa-building-columns"></i>
+                                        {% else %}
+                                            <i class="fas fa-link"></i>
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <span class="org-name">{{ log.organization_name }}</span>
+                                        <span class="access-id">Log ID: #{{ log.id }} ({{ log.action }})</span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="perm-tag">
+                                    {% if 'login' in log.action|lower %}<i class="fas fa-sign-in-alt"></i>{% elif 'share' in log.action|lower %}<i class="fas fa-user-check"></i>{% else %}<i class="fas fa-tag"></i>{% endif %} 
+                                    {{ log.context }}
+                                </span>
+                                <div style="font-size: 11px; color: #64748b; margin-top: 5px;">
+                                    {% if log.status == 'ACTIVE' %}Access granted for {{ log.organization_name }}{% else %}Record Status: {{ log.status }}{% endif %}
+                                </div>
+                            </td>
+                            <td style="color: #475569; font-size: 13px; font-weight: 500;">{{ log.timestamp }}</td>
+                            <td>
+                                {% if log.status == 'ACTIVE' %}
+                                    <span class="status-badge status-active"><i class="fas fa-circle" style="font-size: 6px;"></i> Active</span>
+                                {% elif log.status == 'REVOKED' or log.status == 'BLOCKED' or log.status == 'FAILED' %}
+                                    <span class="status-badge status-revoked"><i class="fas fa-ban"></i> {{ log.status|upper }}</span>
+                                {% else %}
+                                    <span class="status-badge status-expired">{{ log.status|upper }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if log.status == 'ACTIVE' %}
+                                    <button class="btn-revoke" data-log-id="{{ log.id }}" onclick="revokeAccess(this)"><i class="fas fa-power-off"></i> Revoke</button>
+                                {% else %}
+                                    <button class="btn-revoke" style="opacity:0.5; cursor:not-allowed;" disabled>Terminated</button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div id="toast"></div>
+
+    <script>
+        // Javascript to handle the dynamic revocation of access
+        function showToast(message) {
+            var x = document.getElementById("toast");
+            x.innerHTML = message;
+            x.className = "show";
+            setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000);
+        }
+
+        async function revokeAccess(button) {
+            const logId = button.getAttribute('data-log-id');
+            if (!confirm(`Are you sure you want to revoke access for Log ID #${logId}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/revoke_access/${logId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showToast(data.message);
+                    
+                    // Update UI immediately
+                    const row = button.closest('tr');
+                    
+                    // Change status badge
+                    const statusCell = row.querySelector('td:nth-child(4)');
+                    statusCell.innerHTML = '<span class="status-badge status-revoked"><i class="fas fa-ban"></i> REVOKED</span>';
+                    
+                    // Disable the button
+                    const actionCell = row.querySelector('td:nth-child(5)');
+                    actionCell.innerHTML = '<button class="btn-revoke" style="opacity:0.5; cursor:not-allowed;" disabled>Terminated</button>';
+
+                } else {
+                    showToast(`Error: ${data.message || 'Failed to revoke access.'}`);
+                }
+            } catch (error) {
+                console.error('Revocation Error:', error);
+                showToast('A network error occurred.');
+            }
+        }
+    </script>
+</body>
+</html>

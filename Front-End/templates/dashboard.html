@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | Smart Life Profile ID (SLP-ID)</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --gov-blue: #003366;
+            --gov-dark: #002244;
+            --gov-gold: #dba914;
+            --bg-light: #f4f7f6;
+            --text-dark: #1f2937;
+            --text-light: #6b7280;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, sans-serif; }
+        
+        body { background-color: var(--bg-light); color: var(--text-dark); display: flex; height: 100vh; overflow: hidden; }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            width: 280px;
+            background-color: white;
+            border-right: 1px solid #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.02);
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 30px;
+            color: var(--gov-blue);
+        }
+
+        .logo-area i { font-size: 24px; }
+        .logo-area h2 { font-size: 18px; font-weight: 800; }
+
+        /* User Widget in Sidebar */
+        .user-widget {
+            background: linear-gradient(135deg, var(--gov-blue), var(--gov-dark));
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0, 51, 102, 0.2);
+        }
+
+        .user-avatar {
+            width: 70px;
+            height: 70px;
+            background-color: white;
+            border-radius: 50%;
+            margin: 0 auto 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid var(--gov-gold);
+            font-size: 30px;
+            color: var(--gov-blue);
+        }
+
+        .user-widget h3 { font-size: 16px; margin-bottom: 5px; }
+        .user-widget p { font-size: 12px; opacity: 0.8; margin-bottom: 15px; }
+
+        .security-badges {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .badge {
+            font-size: 10px;
+            padding: 4px 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Navigation */
+        .nav-links { list-style: none; flex: 1; }
+        .nav-item { margin-bottom: 5px; }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 15px;
+            text-decoration: none;
+            color: var(--text-light);
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            background-color: #eef5fc;
+            color: var(--gov-blue);
+        }
+
+        .nav-link.active { border-left: 4px solid var(--gov-blue); }
+
+        /* --- MAIN CONTENT --- */
+        .main-content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 { font-size: 24px; color: var(--gov-blue); }
+        .date { font-size: 14px; color: var(--text-light); }
+
+        /* GRID LAYOUT */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr; /* Left side wider than right */
+            gap: 25px;
+        }
+
+        /* --- DIGITAL ID CARD --- */
+        .digital-id-card {
+            background: linear-gradient(135deg, #003366 0%, #0055aa 100%);
+            border-radius: 16px;
+            padding: 25px;
+            color: white;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 20px rgba(0, 51, 102, 0.15);
+            min-height: 220px;
+        }
+
+        /* Decorative Patterns */
+        .bg-pattern {
+            position: absolute;
+            top: 0; right: 0;
+            width: 200px; height: 200px;
+            background: url('https://www.transparenttextures.com/patterns/cubes.png');
+            opacity: 0.1;
+        }
+
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+        .chip { width: 45px; height: 35px; background: linear-gradient(45deg, #d4af37, #f9e79f, #d4af37); border-radius: 6px; }
+        .gov-logo { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;}
+        
+        .card-body { display: flex; gap: 20px; align-items: center; }
+        .id-photo { width: 100px; height: 120px; background: #ddd; border-radius: 8px; object-fit: cover; border: 2px solid white; }
+        
+        .id-details h2 { font-size: 22px; margin-bottom: 5px; }
+        .id-details p { font-size: 14px; opacity: 0.9; margin-bottom: 2px; }
+        .id-number { font-family: 'Courier New', monospace; letter-spacing: 2px; font-size: 16px; margin-top: 10px; font-weight: bold; }
+
+        .verification-tick {
+            position: absolute;
+            bottom: 20px; right: 20px;
+            background: white;
+            color: var(--gov-blue);
+            width: 30px; height: 30px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        /* --- QUICK ACTIONS --- */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 25px;
+        }
+
+        .action-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #eee;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .action-card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.05); border-color: var(--gov-blue); }
+        .action-card i { font-size: 24px; color: var(--gov-blue); margin-bottom: 10px; }
+        .action-card h4 { font-size: 14px; }
+
+        /* --- ACCESS LOG WIDGET (The Requested Widget) --- */
+        .widget-panel {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #e5e7eb;
+            height: 100%;
+        }
+
+        .widget-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+        .widget-header h3 { font-size: 16px; font-weight: 700; color: var(--gov-dark); }
+        .widget-header span { font-size: 12px; color: var(--success); background: #ecfdf5; padding: 2px 8px; border-radius: 10px; }
+
+        .log-list { list-style: none; }
+        
+        .log-item {
+            display: flex;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .log-item:last-child { border-bottom: none; }
+
+        .log-icon {
+            width: 36px; height: 36px;
+            background: #eef5fc;
+            color: var(--gov-blue);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px;
+        }
+
+        .log-details { flex: 1; }
+        .log-details h4 { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+        .log-details p { font-size: 11px; color: var(--text-light); }
+        .log-time { font-size: 11px; color: var(--text-light); text-align: right; min-width: 60px; }
+
+        .doc-tag {
+            display: inline-block;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #f3f4f6;
+            color: #555;
+            margin-top: 4px;
+        }
+
+        /* --- MOBILE --- */
+        @media (max-width: 900px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+            .sidebar { display: none; } /* Simplified for demo, usually use hamburger menu */
+        }
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div class="logo-area">
+            <i class="fas fa-shield-alt"></i>
+            <h2>SLP-ID</h2>
+        </div>
+
+        <div class="user-widget">
+            <div class="user-avatar">
+                <i class="fas fa-user"></i>
+            </div>
+            <h3>{{ user.full_name }}</h3>
+            <p>ID: {{ user.mykad_number }}</p>
+            
+            <div class="security-badges">
+                <div class="badge" title="Income Bracket"><i class="fas fa-money-bill-wave"></i> {{ user.income_bracket }}</div>
+                <div class="badge" title="OKU Status"><i class="fas fa-wheelchair"></i> {{ user.oku_status }}</div>
+                <div class="badge" title="Encryption Active"><i class="fas fa-lock"></i> AES</div>
+            </div>
+        </div>
+
+        <ul class="nav-links">
+            <li class="nav-item">
+                <a href="/" class="nav-link active"><i class="fas fa-th-large"></i> Dashboard</a>
+            </li>
+            <li class="nav-item">
+                <a href="/files" class="nav-link"><i class="fas fa-folder-open"></i> My Files</a>
+            </li>
+            <li class="nav-item">
+                <a href="/share" class="nav-link"><i class="fas fa-user-check"></i> Permissions (P2V)</a>
+            </li>
+            <li class="nav-item">
+                <a href="/logs" class="nav-link"><i class="fas fa-history"></i> Access Logs</a>
+            </li>
+            <li class="nav-item">
+                <a href="/settings" class="nav-link"><i class="fas fa-cog"></i> Settings</a>
+            </li>
+        </ul>
+
+        <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid #eee;">
+            <a href="/logout" class="nav-link" style="color: var(--danger);"><i class="fas fa-sign-out-alt"></i> Secure Logout</a>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div class="header">
+            <div>
+                <h1>Welcome back, {{ user.full_name.split(' ')[0] }}.</h1>
+                <p class="date">Last Login: {{ user.last_login or 'Today' }}, 10:42 AM via Face Recognition</p>
+            </div>
+            <button style="padding: 10px 20px; background: var(--gov-blue); color: white; border: none; border-radius: 6px; cursor: pointer;">
+                <i class="fas fa-qrcode"></i> Show QR ID
+            </button>
+        </div>
+
+        <div class="dashboard-grid">
+            
+            <div class="left-col">
+                <div class="digital-id-card">
+                    <div class="bg-pattern"></div>
+                    <div class="card-header">
+                        <div class="chip"></div>
+                        <div class="gov-logo">
+                            <i class="fas fa-university"></i> Government of Malaysia
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <img src="https://ui-avatars.com/api/?name={{ user.full_name | replace(' ', '+') }}&background=fff&color=003366" class="id-photo" alt="Profile">
+                        <div class="id-details">
+                            <h2>{{ user.full_name }}</h2>
+                            <p><strong>Address:</strong> {{ user.address }}</p>
+                            <p><strong>Category:</strong> Citizen / {{ user.income_bracket }}</p>
+                            <div class="id-number">{{ user.mykad_number }}</div>
+                        </div>
+                    </div>
+                    <div class="verification-tick" title="Identity Verified">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                </div>
+
+                <div class="actions-grid">
+                    <div class="action-card">
+                        <i class="fas fa-key"></i>
+                        <h4>Generate P2V Token</h4>
+                    </div>
+                    <div class="action-card">
+                        <i class="fas fa-home"></i>
+                        <h4>Rent Application</h4>
+                    </div>
+                    <div class="action-card">
+                        <i class="fas fa-file-contract"></i>
+                        <h4>Job Verification</h4>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-col">
+                <div class="widget-panel">
+                    <div class="widget-header">
+                        <h3><i class="fas fa-shield-alt"></i> Access Monitor</h3>
+                        <span>Live</span>
+                    </div>
+                    <ul class="log-list">
+                        <li class="log-item">
+                            <div class="log-icon"><i class="fas fa-university"></i></div>
+                            <div class="log-details">
+                                <h4>Maybank Systems</h4>
+                                <p>Loan Application Verification</p>
+                                <span class="doc-tag">Income Bracket</span>
+                                <span class="doc-tag">Identity Hash</span>
+                            </div>
+                            <div class="log-time">2 mins ago</div>
+                        </li>
+                        </ul>
+                    
+                    <a href="/logs" style="text-decoration:none;">
+                        <button style="width: 100%; margin-top: 15px; padding: 10px; border: 1px dashed #ccc; background: none; color: #666; cursor: pointer; border-radius: 6px;">
+                            View Full Security Log
+                        </button>
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+</body>
+</html>

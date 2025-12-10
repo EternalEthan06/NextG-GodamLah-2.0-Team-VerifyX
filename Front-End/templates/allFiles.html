@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Files | VerifyX</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --gov-blue: #003366;
+            --gov-dark: #002244;
+            --gov-gold: #dba914;
+            --bg-light: #f4f7f6;
+            --text-dark: #1f2937;
+            --text-light: #6b7280;
+            --success: #10b981;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        
+        body { background-color: var(--bg-light); color: var(--text-dark); display: flex; min-height: 100vh; }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            width: 280px; background-color: white; border-right: 1px solid #e5e7eb;
+            display: flex; flex-direction: column; padding: 20px; position: fixed; height: 100%; z-index: 100;
+        }
+        .logo-area { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; color: var(--gov-blue); }
+        .logo-area h2 { font-size: 18px; font-weight: 800; }
+        .user-widget {
+            background: linear-gradient(135deg, var(--gov-blue), var(--gov-dark));
+            color: white; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0, 51, 102, 0.2);
+        }
+        .user-avatar {
+            width: 70px; height: 70px; background-color: white; border-radius: 50%; margin: 0 auto 10px;
+            display: flex; align-items: center; justify-content: center; border: 3px solid var(--gov-gold);
+            font-size: 30px; color: var(--gov-blue);
+        }
+        .security-badges { display: flex; justify-content: center; gap: 8px; margin-top: 10px; }
+        .badge { font-size: 10px; padding: 4px 8px; background: rgba(255,255,255,0.2); border-radius: 20px; display: flex; align-items: center; gap: 4px; }
+        
+        .nav-links { list-style: none; flex: 1; }
+        .nav-item { margin-bottom: 5px; }
+        .nav-link {
+            display: flex; align-items: center; gap: 12px; padding: 12px 15px; text-decoration: none;
+            color: var(--text-light); border-radius: 8px; font-weight: 500; transition: all 0.2s;
+        }
+        .nav-link:hover { background-color: #eef5fc; color: var(--gov-blue); }
+        .nav-link.active { background-color: #eef5fc; color: var(--gov-blue); border-left: 4px solid var(--gov-blue); }
+
+        /* --- MAIN CONTENT --- */
+        .main-content { margin-left: 280px; flex: 1; padding: 40px; position: relative; }
+
+        .page-header { margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+        .page-header h1 { color: var(--gov-blue); font-size: 28px; margin-bottom: 5px; }
+        .page-header p { color: #666; font-size: 14px; }
+
+        .files-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 25px;
+        }
+
+        .file-card {
+            background: white; border-radius: 12px; border: 1px solid #e5e7eb;
+            overflow: hidden; transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+        }
+        .file-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.08); border-color: var(--gov-blue); }
+
+        .card-top {
+            height: 100px; background: #f8fafc; display: flex; align-items: center; justify-content: center;
+            border-bottom: 1px solid #f1f5f9; position: relative;
+        }
+        .file-icon { font-size: 40px; color: var(--gov-blue); }
+        
+        .verified-badge {
+            position: absolute; top: 10px; right: 10px;
+            background: #dcfce7; color: #166534; font-size: 10px; font-weight: bold;
+            padding: 4px 8px; border-radius: 4px; display: flex; gap: 4px; align-items: center;
+        }
+
+        .card-body { padding: 20px; }
+        .file-title { font-size: 16px; font-weight: 700; color: #1f2937; margin-bottom: 5px; }
+        .file-issuer { font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 15px; }
+        
+        .meta-row { display: flex; justify-content: space-between; font-size: 12px; color: #6b7280; margin-bottom: 5px; }
+        
+        .card-actions {
+            margin-top: 15px; padding-top: 15px; border-top: 1px dashed #eee;
+            text-align: center;
+        }
+        .btn-view {
+            display: block; width: 100%; padding: 8px; background: #eef5fc; color: var(--gov-blue); border: none; border-radius: 6px;
+            font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; transition: 0.2s;
+        }
+        .btn-view:hover { background: #e0f2fe; }
+
+        .hash-id {
+            font-family: monospace; font-size: 10px; color: #cbd5e1; margin-top: 10px; 
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        /* --- MODAL STYLES --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        
+        .modal-content {
+            background: white; width: 90%; max-width: 600px; border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2); animation: popIn 0.3s ease;
+            position: relative; overflow: hidden;
+        }
+
+        .modal-header {
+            background: #f8fafc; padding: 15px 25px; border-bottom: 1px solid #e2e8f0;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-title { font-weight: bold; color: var(--gov-dark); font-size: 16px; }
+        .close-btn { cursor: pointer; font-size: 20px; color: #64748b; }
+        
+        .modal-body { padding: 30px; position: relative; }
+
+        /* PREVIEW CONTENT STYLES */
+        .doc-header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 25px; display: flex; align-items: center; gap: 15px; }
+        .authority-logo { font-size: 32px; color: #333; }
+        .doc-title { font-size: 20px; font-weight: 800; color: #111; text-transform: uppercase; letter-spacing: 1px; }
+        .doc-subtitle { font-size: 10px; color: #666; text-transform: uppercase; }
+
+        .field-row { margin-bottom: 15px; border-bottom: 1px dashed #eee; padding-bottom: 5px; }
+        .field-row:last-child { border: none; }
+        .field-label { font-size: 10px; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
+        .field-value { font-size: 15px; color: #111; font-weight: 600; font-family: 'Courier New', monospace; }
+
+        .stamp-box {
+            position: absolute; top: 20px; right: 20px;
+            border: 2px solid var(--success); color: var(--success); padding: 5px 10px;
+            border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase;
+            transform: rotate(-5deg); opacity: 0.8; background: rgba(16, 185, 129, 0.05);
+        }
+
+        @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div class="logo-area"><i class="fas fa-shield-alt"></i> <h2>SLP-ID</h2></div>
+
+        <div class="user-widget">
+            <div class="user-avatar"><i class="fas fa-user"></i></div>
+            <h3>Lee Jasmin</h3>
+            <p>ID: 981225-14-5521</p>
+            <div class="security-badges">
+                <div class="badge"><i class="fas fa-check"></i> Verified</div>
+                <div class="badge"><i class="fas fa-lock"></i> Secured</div>
+            </div>
+        </div>
+
+        <ul class="nav-links">
+            <li class="nav-item"><a href="/dashboard" class="nav-link"><i class="fas fa-th-large"></i> Dashboard</a></li>
+            <li class="nav-item"><a href="/files" class="nav-link active"><i class="fas fa-folder-open"></i> My Files</a></li>
+            <li class="nav-item"><a href="/share" class="nav-link"><i class="fas fa-user-check"></i> Permissions (P2V)</a></li>
+            <li class="nav-item"><a href="/logs" class="nav-link"><i class="fas fa-history"></i> Access Logs</a></li>
+            <li class="nav-item"><a href="/settings" class="nav-link"><i class="fas fa-cog"></i> Settings</a></li>
+        </ul>
+
+        <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid #eee;">
+            <a href="/logout" class="nav-link" style="color: var(--danger);"><i class="fas fa-sign-out-alt"></i> Secure Logout</a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        
+        <div class="page-header">
+            <div>
+                <h1>My Digital Files</h1>
+                <p>All verified documents stored in your Smart Life Profile (Layer 01).</p>
+            </div>
+            <button style="padding: 10px 20px; background: var(--gov-blue); color: white; border: none; border-radius: 8px; cursor: pointer;">
+                <i class="fas fa-plus"></i> Request Verification
+            </button>
+        </div>
+
+        <div class="files-grid">
+            
+            <div class="file-card">
+                <div class="card-top">
+                    <div class="verified-badge"><i class="fas fa-check-circle"></i> JPN</div>
+                    <i class="fas fa-id-card file-icon"></i>
+                </div>
+                <div class="card-body">
+                    <div class="file-title">MyKad Identity</div>
+                    <div class="file-issuer">Jabatan Pendaftaran Negara</div>
+                    <div class="meta-row"><span>Updated:</span> <span>12 Oct 2024</span></div>
+                    <div class="card-actions">
+                        <button class="btn-view" onclick="openPreview('identity')">View Detail</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="file-card">
+                <div class="card-top">
+                    <div class="verified-badge"><i class="fas fa-check-circle"></i> JPJ</div>
+                    <i class="fas fa-car file-icon" style="color: #e65100;"></i>
+                </div>
+                <div class="card-body">
+                    <div class="file-title">Driving License (CDL)</div>
+                    <div class="file-issuer">Jabatan Pengangkutan Jalan</div>
+                    <div class="meta-row"><span>Expiry:</span> <span>2028</span></div>
+                    <div class="card-actions">
+                        <button class="btn-view" onclick="openPreview('license')">View Detail</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="file-card">
+                <div class="card-top">
+                    <div class="verified-badge"><i class="fas fa-check-circle"></i> LHDN</div>
+                    <i class="fas fa-file-invoice-dollar file-icon" style="color: #166534;"></i>
+                </div>
+                <div class="card-body">
+                    <div class="file-title">Income Statement</div>
+                    <div class="file-issuer">Lembaga Hasil Dalam Negeri</div>
+                    <div class="meta-row"><span>Year:</span> <span>2024</span></div>
+                    <div class="card-actions">
+                        <button class="btn-view" onclick="openPreview('income')">View Detail</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="file-card">
+                <div class="card-top">
+                    <div class="verified-badge"><i class="fas fa-check-circle"></i> MOHE</div>
+                    <i class="fas fa-graduation-cap file-icon" style="color: #4338ca;"></i>
+                </div>
+                <div class="card-body">
+                    <div class="file-title">University Transcript</div>
+                    <div class="file-issuer">University of Malaya</div>
+                    <div class="meta-row"><span>Degree:</span> <span>Comp. Science</span></div>
+                    <div class="card-actions">
+                        <button class="btn-view" onclick="openPreview('transcript')">View Detail</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="file-card">
+                <div class="card-top">
+                    <div class="verified-badge"><i class="fas fa-check-circle"></i> MOH</div>
+                    <i class="fas fa-syringe file-icon" style="color: #be123c;"></i>
+                </div>
+                <div class="card-body">
+                    <div class="file-title">Vaccination Cert</div>
+                    <div class="file-issuer">Ministry of Health (MySejahtera)</div>
+                    <div class="meta-row"><span>Status:</span> <span>Fully Vaccinated</span></div>
+                    <div class="card-actions">
+                        <button class="btn-view" onclick="openPreview('vaccine')">View Detail</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="file-card">
+                <div class="card-top">
+                    <div class="verified-badge"><i class="fas fa-check-circle"></i> KWSP</div>
+                    <i class="fas fa-coins file-icon" style="color: #104099;"></i>
+                </div>
+                <div class="card-body">
+                    <div class="file-title">EPF Statement</div>
+                    <div class="file-issuer">Kumpulan Wang Simpanan Pekerja</div>
+                    <div class="meta-row"><span>Year:</span> <span>2024</span></div>
+                    <div class="card-actions">
+                        <button class="btn-view" onclick="openPreview('epf')">View Detail</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="file-card">
+                <div class="card-top">
+                    <div class="verified-badge"><i class="fas fa-check-circle"></i> JPN</div>
+                    <i class="fas fa-certificate file-icon" style="color: #0d9488;"></i>
+                </div>
+                <div class="card-body">
+                    <div class="file-title">Birth Certificate</div>
+                    <div class="file-issuer">Jabatan Pendaftaran Negara</div>
+                    <div class="meta-row"><span>Type:</span> <span>Original</span></div>
+                    <div class="card-actions">
+                        <button class="btn-view" onclick="openPreview('birth')">View Detail</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="previewModal" onclick="closeModal(event)">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">Document Preview</span>
+                <i class="fas fa-times close-btn" onclick="document.getElementById('previewModal').style.display='none'"></i>
+            </div>
+            <div class="modal-body" id="modalBody">
+                </div>
+        </div>
+    </div>
+
+<script>
+    // DOCUMENT DATA (Simulated)
+    const docs = {
+        'identity': {
+            title: 'IDENTITY CARD',
+            source: 'JABATAN PENDAFTARAN NEGARA',
+            icon: 'fa-id-card',
+            color: '#003366',
+            fields: [
+                { label: 'Full Name', value: 'LEE JASMIN' },
+                { label: 'MyKad No', value: '981225-14-5521' },
+                { label: 'Citizenship', value: 'WARGANEGARA' },
+                { label: 'Address', value: 'NO 12, JALAN TEKNOLOGI, KL' }
+            ]
+        },
+        'license': {
+            title: 'DRIVING LICENSE',
+            source: 'JABATAN PENGANGKUTAN JALAN',
+            icon: 'fa-car',
+            color: '#e65100',
+            fields: [
+                { label: 'Name', value: 'LEE JASMIN' },
+                { label: 'Class', value: 'D (CAR), B2 (MOTOR)' },
+                { label: 'Validity', value: 'VALID UNTIL 2028' },
+                { label: 'Competency', value: 'FULL (CDL)' }
+            ]
+        },
+        'income': {
+            title: 'INCOME STATEMENT',
+            source: 'LEMBAGA HASIL DALAM NEGERI',
+            icon: 'fa-file-invoice-dollar',
+            color: '#166534',
+            fields: [
+                { label: 'Tax Year', value: '2024' },
+                { label: 'Total Income', value: 'RM 54,000.00' },
+                { label: 'Tax Paid', value: 'RM 1,200.00' },
+                { label: 'Status', value: 'CLEARED' }
+            ]
+        },
+        'transcript': {
+            title: 'ACADEMIC TRANSCRIPT',
+            source: 'UNIVERSITY OF MALAYA',
+            icon: 'fa-graduation-cap',
+            color: '#4338ca',
+            fields: [
+                { label: 'Student', value: 'LEE JASMIN' },
+                { label: 'Program', value: 'BACHELOR OF COMPUTER SCIENCE' },
+                { label: 'CGPA', value: '3.85 (FIRST CLASS)' },
+                { label: 'Graduation', value: '2023' }
+            ]
+        },
+        'vaccine': {
+            title: 'VACCINATION CERT',
+            source: 'MINISTRY OF HEALTH (MOH)',
+            icon: 'fa-syringe',
+            color: '#be123c',
+            fields: [
+                { label: 'Name', value: 'LEE JASMIN' },
+                { label: 'Status', value: 'FULLY VACCINATED' },
+                { label: 'Dose 1', value: 'PFIZER (BATCH FK001)' },
+                { label: 'Dose 2', value: 'PFIZER (BATCH FK055)' }
+            ]
+        },
+        'epf': {
+            title: 'EPF MEMBER STATEMENT',
+            source: 'KUMPULAN WANG SIMPANAN PEKERJA',
+            icon: 'fa-coins',
+            color: '#104099',
+            fields: [
+                { label: 'Member No', value: '109923881' },
+                { label: 'Account 1', value: 'RM 45,200.50' },
+                { label: 'Account 2', value: 'RM 12,100.25' },
+                { label: 'Last Dividend', value: '5.4%' }
+            ]
+        },
+        'birth': {
+            title: 'CERTIFICATE OF BIRTH',
+            source: 'JABATAN PENDAFTARAN NEGARA',
+            icon: 'fa-certificate',
+            color: '#0d9488',
+            fields: [
+                { label: 'Child Name', value: 'LEE JASMIN' },
+                { label: 'Date of Birth', value: '25 DEC 1998' },
+                { label: 'Place of Birth', value: 'KUALA LUMPUR' },
+                { label: 'Register No', value: 'D-882199' }
+            ]
+        }
+    };
+
+    function openPreview(type) {
+        const data = docs[type];
+        const modal = document.getElementById('previewModal');
+        const body = document.getElementById('modalBody');
+
+        // Build HTML for the modal content
+        let fieldsHtml = '';
+        data.fields.forEach(field => {
+            fieldsHtml += `
+                <div class="field-row">
+                    <div class="field-label">${field.label}</div>
+                    <div class="field-value">${field.value}</div>
+                </div>
+            `;
+        });
+
+        body.innerHTML = `
+            <div class="stamp-box" style="border-color:${data.color}; color:${data.color}; background:rgba(0,0,0,0.02);">
+                <i class="fas fa-check-circle"></i> VERIFIED
+            </div>
+            
+            <div class="doc-header" style="border-color:${data.color}">
+                <i class="fas ${data.icon} authority-logo" style="color:${data.color}"></i>
+                <div>
+                    <div class="doc-title" style="color:${data.color}">${data.title}</div>
+                    <div class="doc-subtitle">${data.source}</div>
+                </div>
+            </div>
+            
+            ${fieldsHtml}
+        `;
+
+        modal.style.display = 'flex';
+    }
+
+    function closeModal(e) {
+        if (e.target.id === 'previewModal') {
+            e.target.style.display = 'none';
+        }
+    }
+</script>
+
+</body>
+</html>
