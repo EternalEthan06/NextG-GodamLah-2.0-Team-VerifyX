@@ -29,6 +29,7 @@ Users enroll and authenticate using a combination of methods. For vault access, 
 | :--- | :--- |
 | **Face Recognition** | Enrollment and Verification |
 | **Voice Authentication** | Enrollment and Verification |
+| **Fingerprint Authentication** | Enrollment and Verification |
 | **Gesture Recognition** | Enrollment and Verification (User-defined movement patterns) |
 
 ### 3. Secure Login and Data Encryption
