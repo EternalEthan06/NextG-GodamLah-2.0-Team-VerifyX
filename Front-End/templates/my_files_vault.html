@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Secure Files | SLP-ID</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #333; }
+        .header { background: #003366; color: white; padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .container { max-width: 900px; margin: 40px auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+        .file-item { padding: 15px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 15px; }
+        .file-item:last-child { border-bottom: none; }
+        .icon { font-size: 24px; color: #003366; }
+        .badge { background: #d1fae5; color: #065f46; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h3><i class="fas fa-folder-open"></i> My Documents</h3>
+        <a href="/" style="color: white; text-decoration: none;">Back to Dashboard</a>
+    </div>
+    <div class="container">
+        <div style="background: #e0f2fe; color: #0369a1; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <i class="fas fa-lock"></i> <strong>Secure Access Granted:</strong> Identity verified via Biometrics.
+        </div>
+        
+        <h2>Your Personal Documents</h2>
+        
+        <div class="file-item">
+            <i class="fas fa-id-card icon"></i>
+            <div style="flex: 1;">
+                <strong>MyKad_Digital_Copy.pdf</strong><br>
+                <small>Uploaded: 12 Oct 2024</small>
+            </div>
+            <span class="badge">VERIFIED</span>
+            <button style="padding: 5px 10px;">Download</button>
+        </div>
+
+        <div class="file-item">
+            <i class="fas fa-graduation-cap icon"></i>
+            <div style="flex: 1;">
+                <strong>SPM_Certificate_2023.pdf</strong><br>
+                <small>Uploaded: 05 Jan 2025</small>
+            </div>
+            <span class="badge">VERIFIED</span>
+            <button style="padding: 5px 10px;">Download</button>
+        </div>
+        
+        </div>
+</body>
+</html>

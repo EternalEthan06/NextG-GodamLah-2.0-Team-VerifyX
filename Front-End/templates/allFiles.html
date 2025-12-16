@@ -1,0 +1,525 @@
+{% extends "base.html" %}
+
+{% block title %}My Files | VerifyX{% endblock %}
+
+{% block styles %}
+<style>
+    .page-header {
+        margin-bottom: 30px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+    }
+
+    .page-header h1 {
+        color: var(--gov-blue);
+        font-size: 28px;
+        margin-bottom: 5px;
+    }
+
+    .page-header p {
+        color: #666;
+        font-size: 14px;
+    }
+
+    .files-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 25px;
+    }
+
+    .file-card {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        overflow: hidden;
+        transition: transform 0.2s, box-shadow 0.2s;
+        position: relative;
+    }
+
+    .file-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        border-color: var(--gov-blue);
+    }
+
+    .card-top {
+        height: 100px;
+        background: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+        color: var(--gov-blue);
+        border-bottom: 1px solid #f1f1f1;
+        position: relative;
+    }
+
+    .status-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        font-size: 10px;
+        background: white;
+        padding: 4px 8px;
+        border-radius: 20px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        font-weight: 700;
+    }
+
+    .card-body {
+        padding: 20px;
+    }
+
+    .card-body h3 {
+        font-size: 16px;
+        margin-bottom: 5px;
+        color: var(--text-dark);
+    }
+
+    .card-body p {
+        font-size: 12px;
+        color: var(--text-light);
+        margin-bottom: 15px;
+    }
+
+    .preview-btn {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--gov-blue);
+        background: white;
+        color: var(--gov-blue);
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .preview-btn:hover {
+        background: var(--gov-blue);
+        color: white;
+    }
+
+    /* --- PREVIEW MODAL --- */
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(5px);
+    }
+
+    .modal.active {
+        display: flex;
+    }
+
+    .modal-content {
+        background: white;
+        width: 90%;
+        max-width: 500px;
+        border-radius: 16px;
+        padding: 30px;
+        animation: slideUp 0.3s ease-out;
+        position: relative;
+    }
+
+    @keyframes slideUp {
+        from {
+            transform: translateY(20px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 25px;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 15px;
+    }
+
+    .modal-header h2 {
+        font-size: 20px;
+        color: var(--gov-blue);
+    }
+
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 20px;
+        color: #999;
+        cursor: pointer;
+    }
+
+    .close-btn:hover {
+        color: var(--danger);
+    }
+
+    /* PREVIEW DETAILS */
+    .doc-preview {
+        background: #f9f9f9;
+        padding: 20px;
+        border: 1px dashed #ccc;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+
+    .doc-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        font-size: 14px;
+    }
+
+    .doc-label {
+        color: #666;
+        font-weight: 500;
+    }
+
+    .doc-val {
+        font-weight: 700;
+        color: #333;
+    }
+
+    .verify-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: #ecfdf5;
+        color: var(--success);
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 700;
+        margin-top: 10px;
+    }
+
+    .share-btn {
+        width: 100%;
+        background: var(--gov-blue);
+        color: white;
+        padding: 12px;
+        border-radius: 8px;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 10px;
+    }
+
+    .status-available {
+        color: var(--success);
+    }
+
+    .status-unavailable {
+        color: #999;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>My Digital Documents</h1>
+        <p>Securely managed official government documents.</p>
+    </div>
+</div>
+
+<div class="files-grid">
+
+    {% for file in files %}
+    <div class="file-card">
+        <div class="card-top">
+            <i class="fas {{ file.icon }}"></i>
+            <!-- Use conditional class instead of inline style to fix parser confusion -->
+            <div
+                class="status-badge {% if file.status == 'Available' %}status-available{% else %}status-unavailable{% endif %}">
+                {{ file.status }}
+            </div>
+        </div>
+        <div class="card-body">
+            <h3>{{ file.name }}</h3>
+            <p>Verified Source</p>
+            <!-- We trigger modal with specific data attributes -->
+            <!-- Using data attribute to avoid Jinja syntax confusing the JS parser in onclick -->
+            <button class="preview-btn" data-preview-key="{{ file.name | lower | replace(' ', '_') }}"
+                onclick="openPreview(this.dataset.previewKey)">
+                <i class="fas fa-eye"></i> View Details
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Static placeholders if list is empty (for demo) -->
+    <div class="file-card">
+        <div class="card-top">
+            <i class="fas fa-id-card"></i>
+            <div class="status-badge" style="color: var(--success);">Verified</div>
+        </div>
+        <div class="card-body">
+            <h3>Identity Card (MyKad)</h3>
+            <p>JPN Malaysia</p>
+            <button class="preview-btn" onclick="openPreview('identity')">
+                <i class="fas fa-eye"></i> View Details
+            </button>
+        </div>
+    </div>
+
+    <div class="file-card">
+        <div class="card-top">
+            <i class="fas fa-car-side"></i>
+            <div class="status-badge" style="color: var(--success);">Valid</div>
+        </div>
+        <div class="card-body">
+            <h3>Driving License</h3>
+            <p>JPJ Malaysia</p>
+            <button class="preview-btn" onclick="openPreview('license')">
+                <i class="fas fa-eye"></i> View Details
+            </button>
+        </div>
+    </div>
+
+    <div class="file-card">
+        <div class="card-top">
+            <i class="fas fa-file-invoice-dollar"></i>
+            <div class="status-badge" style="color: var(--success);">2024</div>
+        </div>
+        <div class="card-body">
+            <h3>Income Tax Slip</h3>
+            <p>LHDN Malaysia</p>
+            <button class="preview-btn" onclick="openPreview('income')">
+                <i class="fas fa-eye"></i> View Details
+            </button>
+        </div>
+    </div>
+
+    <div class="file-card">
+        <div class="card-top">
+            <i class="fas fa-graduation-cap"></i>
+            <div class="status-badge" style="color: var(--gov-gold);">Original</div>
+        </div>
+        <div class="card-body">
+            <h3>University Transcript</h3>
+            <p>University of Malaya</p>
+            <button class="preview-btn" onclick="openPreview('transcript')">
+                <i class="fas fa-eye"></i> View Details
+            </button>
+        </div>
+    </div>
+
+    <div class="file-card">
+        <div class="card-top">
+            <i class="fas fa-syringe"></i>
+            <div class="status-badge" style="color: var(--success);">Verified</div>
+        </div>
+        <div class="card-body">
+            <h3>Vaccination Cert</h3>
+            <p>MySejahtera</p>
+            <button class="preview-btn" onclick="openPreview('vaccine')">
+                <i class="fas fa-eye"></i> View Details
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- PREVIEW MODAL -->
+<div class="modal" id="previewModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">Document Viewer</h2>
+            <button class="close-btn" onclick="closePreview()">&times;</button>
+        </div>
+
+        <!-- This area will be populated by JS -->
+        <div id="modalBody">
+            <!-- content -->
+        </div>
+
+        <button class="share-btn"><i class="fas fa-share-alt"></i> Share this Document</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const modal = document.getElementById('previewModal');
+    const title = document.getElementById('modalTitle');
+    const body = document.getElementById('modalBody');
+
+    // MOCK DATA for Previews - Now dynamic with Jinja
+    const docs = {
+        'identity': {
+            title: 'MYKAD DETAILS',
+            source: 'JPN Database',
+            icon: 'fa-id-card',
+            color: '#003366',
+            fields: [
+                { label: 'Full Name', value: '{{ user.full_name | upper }}' },
+                { label: 'MyKad No', value: '{{ user.mykad_number }}' },
+                { label: 'Citizenship', value: 'WARGANEGARA' },
+                { label: 'Address', value: '{{ user.address | upper }}' }
+            ]
+        },
+        'license': {
+            title: 'DRIVING LICENSE (CLASS D)',
+            source: 'JPJ Database',
+            icon: 'fa-car',
+            color: '#333',
+            fields: [
+                { label: 'Name', value: '{{ user.full_name | upper }}' },
+                { label: 'Validity', value: '15 JAN 2028' },
+                { label: 'Status', value: 'COMPETENT DRIVING LICENSE (CDL)' }
+            ]
+        },
+        'income': {
+            title: 'INCOME TAX SUMMARY (BE 2023)',
+            source: 'LHDN e-Filing',
+            icon: 'fa-file-invoice',
+            color: '#10b981',
+            fields: [
+                { label: 'Name', value: '{{ user.full_name | upper }}' },
+                { label: 'Assessment Year', value: '2023' },
+                { label: 'Total Income', value: '{% if user.income_bracket == "T20" %}RM 250,000.00{% else %}RM 54,000.00{% endif %}' },
+                { label: 'Tax Paid', value: '{% if user.income_bracket == "T20" %}RM 15,000.00{% else %}RM 1,200.00{% endif %}' }
+            ]
+        },
+        'transcript': {
+            title: 'ACADEMIC TRANSCRIPT',
+            source: 'UNIVERSITY MALAYA',
+            icon: 'fa-university',
+            color: '#dba914',
+            fields: [
+                { label: 'Student', value: '{{ user.full_name | upper }}' },
+                { label: 'Program', value: 'BACHELOR OF COMPUTER SCIENCE' },
+                { label: 'CGPA', value: '3.85 (FIRST CLASS)' },
+                { label: 'Graduation', value: '2023' }
+            ]
+        },
+        'vaccine': {
+            title: 'VACCINATION CERT',
+            source: 'MINISTRY OF HEALTH (MOH)',
+            icon: 'fa-syringe',
+            color: '#be123c',
+            fields: [
+                { label: 'Name', value: '{{ user.full_name | upper }}' },
+                { label: 'Status', value: 'FULLY VACCINATED' },
+                { label: 'Dose 1', value: 'PFIZER (BATCH FK001)' },
+                { label: 'Dose 2', value: 'PFIZER (BATCH FK055)' }
+            ]
+        },
+        'epf': {
+            title: 'EPF MEMBER STATEMENT',
+            source: 'KUMPULAN WANG SIMPANAN PEKERJA',
+            icon: 'fa-coins',
+            color: '#104099',
+            fields: [
+                { label: 'Name', value: '{{ user.full_name | upper }}' },
+                { label: 'Member ID', value: '12234455' },
+                { label: 'Total Savings', value: 'RM 85,420.00' }
+            ]
+        },
+        'birth_certificate': {
+            title: 'BIRTH CERTIFICATE',
+            source: 'JPN',
+            icon: 'fa-baby',
+            color: '#003366',
+            fields: [
+                { label: 'Name', value: '{{ user.full_name | upper }}' },
+                { label: 'Date of Birth', value: '{{ user.mykad_number[0:2] }}-{{ user.mykad_number[2:4] }}-{{ user.mykad_number[4:6] }}' },
+                { label: 'Place of Birth', value: 'KUALA LUMPUR' }
+            ]
+        },
+        'water_bill': {
+            title: 'UTILITY BILL (WATER)',
+            source: 'AIR SELANGOR',
+            icon: 'fa-water',
+            color: '#3498db',
+            fields: [
+                { label: 'Name', value: '{{ user.full_name | upper }}' },
+                { label: 'Account No', value: '2001992221' },
+                { label: 'Outstanding', value: 'RM 35.50' }
+            ]
+        },
+        'oku_status_card': {
+            title: 'OKU CARD',
+            source: 'JKM',
+            icon: 'fa-wheelchair',
+            color: '#purple',
+            fields: [
+                { label: 'Name', value: '{{ user.full_name | upper }}' },
+                { label: 'Category', value: 'PHYSICAL' },
+                { label: 'Card No', value: 'PH-1029292' }
+            ]
+        }
+    };
+
+    function openPreview(key) {
+        // Normalize key if passed loosely (e.g. handle undefined map keys gently)
+        // Just basic mapping for demo keys that might not match perfectly
+        if (key.includes('birth')) key = 'birth_certificate';
+        if (key.includes('water')) key = 'water_bill';
+        if (key.includes('oku')) key = 'oku_status_card';
+
+        const data = docs[key];
+        if (!data) {
+            console.error("No data for " + key);
+            return;
+        }
+
+        title.innerText = data.title;
+
+        // Build HTML
+        let html = `
+                <div class="doc-preview">
+                    <div style="text-align: center; margin-bottom: 20px; color: ${data.color}">
+                        <i class="fas ${data.icon}" style="font-size: 40px;"></i>
+                        <p style="margin-top: 5px; font-weight: 600;">${data.source}</p>
+                    </div>
+            `;
+
+        data.fields.forEach(f => {
+            html += `
+                    <div class="doc-row">
+                        <span class="doc-label">${f.label}</span>
+                        <span class="doc-val">${f.value}</span>
+                    </div>
+                `;
+        });
+
+        html += `
+                <div style="text-align: center;">
+                    <div class="verify-badge"><i class="fas fa-check-circle"></i> OFFICIALLY VERIFIED</div>
+                </div>
+            `;
+
+        html += `</div>`;
+
+        body.innerHTML = html;
+        modal.classList.add('active');
+    }
+
+    function closePreview() {
+        modal.classList.remove('active');
+    }
+
+    // Close on outside click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closePreview();
+    });
+</script>
+{% endblock %}
