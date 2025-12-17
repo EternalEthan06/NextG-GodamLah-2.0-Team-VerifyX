@@ -6,6 +6,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voice Verification | SLP-ID</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        // --- GLOBAL TIMEOUT: AUTO-REDIRECT ---
+        document.addEventListener('DOMContentLoaded', function () {
+            const remaining = parseInt("{{ timeout|default(90) }}");
+            // Update Visible Timer
+            startVisibleTimer(remaining);
+
+            // Auto Redirect
+            if (remaining <= 0) {
+                window.location.href = "/login?alert=timeout";
+            } else {
+                setTimeout(() => {
+                    window.location.href = "/login?alert=timeout";
+                }, remaining * 1000);
+            }
+        });
+
+        function startVisibleTimer(seconds) {
+            let sec = Math.floor(seconds);
+            const interval = setInterval(() => {
+                const el = document.getElementById('timer-display');
+                if (el) el.innerText = sec + "s";
+                sec--;
+                if (sec < 0) clearInterval(interval);
+            }, 1000);
+        }
+    </script>
     <style>
         body {
             background-color: #0f172a;
@@ -42,8 +69,15 @@
         h1 {
             font-size: 26px;
             font-weight: 700;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
         }
+
+        /* VISIBLE TIMER */
+        .timer-header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
 
         p {
             color: #94a3b8;
@@ -164,6 +198,13 @@
         <div class="official-badge">
             <img src="https://flagcdn.com/w40/my.png" alt="Malaysia" style="width: 20px; border-radius: 2px;">
             Voice Liveness Check
+        </div>
+
+        <!-- VISIBLE TIMER -->
+        <div class="timer-header">
+            <span style="font-size: 14px; color: #94a3b8;">Session expires in:</span>
+            <span id="timer-display"
+                style="font-weight: bold; color: #f59e0b; font-family: monospace; font-size: 16px;">90s</span>
         </div>
 
         <h1>Verify Your Voice</h1>

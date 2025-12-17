@@ -204,6 +204,13 @@
             Simultaneous Biometric Gate
         </div>
 
+        <!-- VISIBLE GLOBAL TIMER -->
+        <div style="text-align: center; margin-bottom: 15px;">
+            <span style="font-size: 14px; color: #94a3b8;">Session expires in:</span>
+            <span id="global-timer-display"
+                style="font-weight: bold; color: #f59e0b; font-family: monospace; font-size: 16px;">90s</span>
+        </div>
+
         <h1>Identity Verification</h1>
         <p>Hold the gesture while looking at the camera.</p>
 
@@ -240,6 +247,34 @@
         <div class="status-log" id="statusLog">System Ready.</div>
     </div>
 
+    <script>
+        // --- GLOBAL TIMEOUT: AUTO-REDIRECT ---
+        document.addEventListener('DOMContentLoaded', function () {
+            const remaining = parseInt("{{ timeout|default(90) }}");
+
+            // Auto Redirect
+            if (remaining <= 0) {
+                window.location.href = "/login?alert=timeout";
+            } else {
+                setTimeout(() => {
+                    window.location.href = "/login?alert=timeout";
+                }, remaining * 1000);
+            }
+
+            // Update Visible Global Timer
+            startGlobalTimer(remaining);
+        });
+
+        function startGlobalTimer(seconds) {
+            let sec = Math.floor(seconds);
+            const interval = setInterval(() => {
+                const el = document.getElementById('global-timer-display');
+                if (el) el.innerText = sec + "s";
+                sec--;
+                if (sec < 0) clearInterval(interval);
+            }, 1000);
+        }
+    </script>
     <script type="module">
         import {
             GestureRecognizer,
@@ -249,7 +284,7 @@
 
         // CONFIGURATION
         const GESTURE_DURATION_REQUIRED = 3000; // 3.0s hold duration
-        const TIMEOUT_SECONDS = 10;             // 10s timeout
+        const TIMEOUT_SECONDS = 10;             // 10s timeout (GAME LOGIC)
 
         // APP STATE
         let gestureRecognizer = undefined;
@@ -281,8 +316,8 @@
             { uiName: "Peace Sign", type: "MP", mpName: "Victory", img: "peace.png" },
             { uiName: "Thumbs Up", type: "MP", mpName: "Thumb_Up", img: "thumbs_up.png" },
             { uiName: "Thumbs Down", type: "MP", mpName: "Thumb_Down", img: "thumbs_down.png" },
-            { uiName: "Point Up", type: "MP", mpName: "Pointing_Up", img: "point_up.png" },
-            // "I Love You" Removed
+
+            { uiName: "Point Up", type: "CUSTOM", mpName: "POINT_UP", img: "point_up.png" },
 
             // Custom Heuristics
             { uiName: "OK Sign", type: "CUSTOM", mpName: "OK", img: "ok.png" },
@@ -401,26 +436,68 @@
             }, 1000);
         }
 
-        function endGame(success) {
+        async function endGame(success) {
             gameActive = false;
             clearInterval(timerInterval);
-            webcamRunning = false;
+            // Don't stop webcam yet, we might need to retry or capture frame
+            // webcamRunning = false; 
 
             if (success) {
-                log.innerText = ">> IDENTITY CONFIRMED.";
-                log.style.color = "#10b981";
+                log.innerText = ">> GESTURE CORRECT. VERIFYING IDENTITY...";
+                log.style.color = "#fbbf24";
+                handZone.innerHTML = "<i class='fas fa-spinner fa-spin'></i>";
 
-                handZone.style.borderColor = "#10b981";
-                handZone.style.color = "#10b981";
-                handZone.innerHTML = "<i class='fas fa-check'></i>";
+                // DATA CAPTURE
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-                // Keep video/grid for a second to show success
-                setTimeout(() => {
-                    window.location.href = "/step-complete";
-                }, 1000);
+                canvas.toBlob((blob) => {
+                    const formData = new FormData();
+                    formData.append('image', blob, 'gesture_verify.jpg');
+
+                    fetch('/verify-gesture-identity', {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                // SUCCESS -> Show Green
+                                log.innerText = ">> IDENTITY MATCHED. BLINK CHECK PASSED.";
+                                log.style.color = "#10b981";
+                                handZone.style.borderColor = "#10b981";
+                                handZone.style.color = "#10b981";
+                                handZone.innerHTML = "<i class='fas fa-check'></i>";
+
+                                setTimeout(() => {
+                                    window.location.href = "/step-complete";
+                                }, 1000);
+                            } else {
+                                // FAILURE (Identity or Timeout)
+                                log.innerText = ">> VERIFICATION FAILED: " + data.message.toUpperCase();
+                                log.style.color = "red";
+                                handZone.style.borderColor = "red";
+                                handZone.innerHTML = "<i class='fas fa-user-times'></i>";
+
+                                startBtn.innerText = "Retry Verification";
+                                startBtn.disabled = false;
+                                startBtn.onclick = () => location.reload();
+                            }
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            log.innerText = ">> SERVER ERROR during Identity Check.";
+                            log.style.color = "red";
+                        });
+                }, 'image/jpeg');
 
             } else {
-                log.innerText = ">> VERIFICATION FAILED: TIMEOUT";
+                // TIMEOUT FAILURE
+                webcamRunning = false; // Stop cam on timeout
+                log.innerText = ">> GESTURE FAILED: TIMEOUT";
                 log.style.color = "red";
                 handZone.style.borderColor = "red";
                 handZone.innerHTML = "<i class='fas fa-times'></i>";
@@ -541,7 +618,12 @@
                 // Four: Index, Mid, Ring, Pinky UP. Thumb tucked or arbitrary?
                 // Usually just 4 fingers up.
                 return indexUp && midUp && ringUp && pinkyUp;
-                // Don't strictly enforce thumb state as it varies.
+            }
+
+            if (type === "POINT_UP") {
+                // Point Up: Index UP. Others DOWN.
+                // Strict check: Index extended, others curled.
+                return indexUp && !midUp && !ringUp && !pinkyUp;
             }
 
             return false;
