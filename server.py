@@ -35,7 +35,16 @@ ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 os.makedirs(UPLOAD_FOLDER, exist_ok = True)
 os.makedirs(os.path.dirname(DATABASE), exist_ok = True)
 
-USER_ENROLLED = False
+# --- AUTO-INITIALIZE DATABASE ---
+if not os.path.exists(DATABASE):
+    print("WARNING: Database not found. Initializing new database from seed...")
+    try:
+        from data import seed
+        seed.create_database()
+        print("SUCCESS: Database initialized.")
+    except Exception as e:
+        print(f"ERROR: Could not initialize database: {e}")
+
 
 # --- SESSION TIMEOUT CHECK ---
 @app.before_request
