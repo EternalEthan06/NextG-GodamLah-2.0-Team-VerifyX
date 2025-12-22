@@ -1,6 +1,5 @@
 import sqlite3 
 import datetime 
-import time 
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session, send_from_directory, send_file
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash # Keep generate_password_hash for the mock/temp fix
@@ -16,16 +15,40 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from PIL import Image
+import io
+import numpy as np
+
+import numpy as np
 import pickle
+import time
+import random
+import string
+import qrcode
+import base64
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from pypdf import PdfReader, PdfWriter
 
 # Initialize Flask
-app = Flask(__name__, template_folder='Front-End/templates')
+app = Flask(__name__, static_folder='static', template_folder='Front-End/templates') # Explicitly set folders
+print("Initializing VerifyX Server...")
 
 # --- BIOMETRIC MODEL INITIALIZATION ---
 # Load the model once at startup (this might take a few seconds)
 print("Loading Voice Recognition Model...")
 encoder = VoiceEncoder()
 print("Voice Model Loaded.")
+
+# --- MEDIAPIPE INITIALIZATION ---
+print("Loading Face Landmarker Model...")
+base_options = python.BaseOptions(model_asset_path='face_landmarker.task')
+options = vision.FaceLandmarkerOptions(base_options=base_options,
+                                       output_face_blendshapes=True,
+                                       output_facial_transformation_matrixes=True,
+                                       num_faces=1)
+detector = vision.FaceLandmarker.create_from_options(options)
+print("Face Landmarker Model Loaded.")
 
 # Configuration
 app.secret_key = 'your_super_secret_and_unique_key_12345' 
@@ -37,16 +60,11 @@ ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 os.makedirs(UPLOAD_FOLDER, exist_ok = True)
 os.makedirs(os.path.dirname(DATABASE), exist_ok = True)
 
-# --- AUTO-INITIALIZE DATABASE ---
-if not os.path.exists(DATABASE):
-    print("WARNING: Database not found. Initializing new database from seed...")
-    try:
-        from data import seed
-        seed.create_database()
-        print("SUCCESS: Database initialized.")
-    except Exception as e:
-        print(f"ERROR: Could not initialize database: {e}")
+USER_ENROLLED = False
 
+# --- DB INIT HELPER ---
+# Database initialization is handled in data/seed.py
+# VerifyX Server expects the DB to exist at startup.
 
 # --- SESSION TIMEOUT CHECK ---
 @app.before_request
@@ -90,29 +108,7 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def fetch_user_record_by_mykad(mykad):
-    """
-    Fetches a citizen's record using their MyKad number.
-    """
-    try:
-        conn = get_db_connection()
-        user_record = conn.execute('SELECT * FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
-        conn.close()
-        return user_record
-    except sqlite3.OperationalError as e:
-        print(f"DATABASE ERROR: {e}")
-        return None 
-
-# --- MEDIAPIPE INITIALIZATION ---
-base_options = python.BaseOptions(model_asset_path='face_landmarker.task')
-options = vision.FaceLandmarkerOptions(base_options=base_options,
-                                       output_face_blendshapes=True,
-                                       output_facial_transformation_matrixes=True,
-                                       num_faces=1)
-detector = vision.FaceLandmarker.create_from_options(options)
-
-import io
-
+# --- MEDIAPIPE HELPERS ---
 def get_face_vector(image_bytes):
     """
     Extracts a 1D vector (468*3 floats) representing the facial geometry.
@@ -156,8 +152,20 @@ def compare_vectors(v1, v2):
     # Euclidean Distance
     dist = np.linalg.norm(v1 - v2)
     return dist
+# --- END MEDIAPIPE HELPERS ---
 
-# --- END MEDIAPIPE ---
+def fetch_user_record_by_mykad(mykad):
+    """
+    Fetches a citizen's record using their MyKad number.
+    """
+    try:
+        conn = get_db_connection()
+        user_record = conn.execute('SELECT * FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
+        conn.close()
+        return user_record
+    except sqlite3.OperationalError as e:
+        print(f"DATABASE ERROR: {e}")
+        return None 
 
 def log_action(mykad, action, context, organization_name, status = "SUCCESS"):
     """
@@ -289,8 +297,9 @@ def register_failure(mykad, reason="FAILED"):
 @app.route('/handle_login', methods = ['POST'])
 def handle_login():
     data = request.get_json() 
-    mykad = data.get('ic-number')
-    password = data.get('password')
+    mykad = data.get('ic-number', '').strip()
+    password = data.get('password', '').strip()
+    print(f"DEBUG: Handle Login for MyKad: '{mykad}'")
 
     user_record = fetch_user_record_by_mykad(mykad)
     
@@ -327,7 +336,8 @@ def handle_login():
             
             # --- PERSISTENT ENROLLMENT CHECK ---
             # Store in session to avoid global variable issues
-            if user_record['voice_audio_blob']:
+            # Require BOTH Face and Voice to be considered "fully enrolled"
+            if user_record['voice_audio_blob'] and user_record['face_encoding_blob']:
                 session['is_enrolled'] = True
             else:
                 session['is_enrolled'] = False
@@ -347,6 +357,7 @@ def handle_login():
     register_failure(None, "Unknown User")
     return jsonify({'status': 'failure', 'message': 'Invalid MyKad or Password.'}), 401
 
+@app.route('/verify-face', methods=['POST'])
 @app.route('/verify-face', methods=['POST'])
 def verify_face():
     """
@@ -426,62 +437,10 @@ def verify_face():
         print(f"Face Error: {e}")
         return jsonify({'status': 'failure', 'message': 'Error processing face biometrics.'}), 500
 
-@app.route('/verify-gesture-identity', methods=['POST'])
-def verify_gesture_identity():
-    """
-    Called during the Gesture Step to re-verify that the person performing
-    the gesture is indeed the enrolled user.
-    """
-    if check_timeout():
-        return jsonify({'status': 'failure', 'message': 'TIMEOUT.', 'redirect': url_for('login', alert='timeout')})
-        
-    mykad = session.get('user_mykad')
-    
-    if 'image' not in request.files:
-        return jsonify({'status': 'failure', 'message': 'No image.'}), 400
-        
-    file = request.files['image']
-    
-    try:
-        # 1. Read Bytes directly
-        image_blob = file.read()
-        
-        # 2. Extract Vector (MediaPipe)
-        new_vector = get_face_vector(image_blob)
-        
-        if new_vector is None:
-             return jsonify({'status': 'failure', 'message': 'No face detected. Please show your face.'})
-        
-        # 3. IDENTITY VERIFICATION (Compare with DB)
-        conn = get_db_connection()
-        user_record = conn.execute('SELECT face_encoding_blob FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
-        conn.close()
 
-        if not user_record or not user_record['face_encoding_blob']:
-             return jsonify({'status': 'failure', 'message': 'No enrolled face data found.'})
 
-        stored_vector = pickle.loads(user_record['face_encoding_blob'])
-        
-        # Compare
-        distance = compare_vectors(stored_vector, new_vector)
-        print(f"DEBUG: Gesture Face Dist = {distance:.4f}")
-        
-        # Threshold similar to verify_face
-        if distance > 4.0: # Slightly looser for gestures
-             log_action(mykad, "GESTURE_VERIFY", f"Face Mismatch (Dist={distance:.2f})", "System", "FAILED")
-             return jsonify({'status': 'failure', 'message': 'Identity verification failed. Face does not match.'})
 
-        # 4. Identity Confirmed
-        print(f"DEBUG: Gesture Identity Verified. Dist={distance:.2f}")
-        log_action(mykad, "GESTURE_VERIFY", f"Identity Confirmed", "System", "SUCCESS")
-        
-        return jsonify({'status': 'success', 'message': 'Identity confirmed.', 'blink_info': "Pass"})
-
-    except Exception as e:
-        print(f"Gesture Identity Error: {e}")
-        return jsonify({'status': 'failure', 'message': 'Processing error.'}), 500
-
-@app.route('/verify-voice', methods=['POST'])
+@app.route('/verify-voice', methods = ['POST'])
 def verify_voice():
     """
     Receives audio blob, saves it, and performs verification.
@@ -678,6 +637,61 @@ def biometric_step():
     else: 
         return redirect(url_for('login'))
 
+@app.route('/verify-gesture-identity', methods=['POST'])
+def verify_gesture_identity():
+    """
+    Called during the Gesture Step to re-verify that the person performing
+    the gesture is indeed the enrolled user.
+    """
+    if check_timeout():
+        return jsonify({'status': 'failure', 'message': 'TIMEOUT.', 'redirect': url_for('login', alert='timeout')})
+        
+    mykad = session.get('user_mykad')
+    
+    if 'image' not in request.files:
+        return jsonify({'status': 'failure', 'message': 'No image.'}), 400
+        
+    file = request.files['image']
+    
+    try:
+        # 1. Read Bytes directly
+        image_blob = file.read()
+        
+        # 2. Extract Vector (MediaPipe)
+        new_vector = get_face_vector(image_blob)
+        
+        if new_vector is None:
+             return jsonify({'status': 'failure', 'message': 'No face detected. Please show your face.'})
+        
+        # 3. IDENTITY VERIFICATION (Compare with DB)
+        conn = get_db_connection()
+        user_record = conn.execute('SELECT face_encoding_blob FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
+        conn.close()
+
+        if not user_record or not user_record['face_encoding_blob']:
+             return jsonify({'status': 'failure', 'message': 'No enrolled face data found.'})
+
+        stored_vector = pickle.loads(user_record['face_encoding_blob'])
+        
+        # Compare
+        distance = compare_vectors(stored_vector, new_vector)
+        print(f"DEBUG: Gesture Face Dist = {distance:.4f}")
+        
+        # Threshold similar to verify_face
+        if distance > 4.0: # Slightly looser for gestures
+             log_action(mykad, "GESTURE_VERIFY", f"Face Mismatch (Dist={distance:.2f})", "System", "FAILED")
+             return jsonify({'status': 'failure', 'message': 'Identity verification failed. Face does not match.'})
+
+        # 4. Identity Confirmed
+        print(f"DEBUG: Gesture Identity Verified. Dist={distance:.2f}")
+        log_action(mykad, "GESTURE_VERIFY", f"Identity Confirmed", "System", "SUCCESS")
+        
+        return jsonify({'status': 'success', 'message': 'Identity confirmed.', 'blink_info': "Pass"})
+
+    except Exception as e:
+        print(f"Gesture Identity Error: {e}")
+        return jsonify({'status': 'failure', 'message': 'Processing error.'}), 500
+
 @app.route('/step-complete')
 def step_complete():
     """
@@ -744,7 +758,7 @@ def dashboard():
         return redirect(url_for('login'))
     
     # Fetch recent logs for dashboard widget (limit 5)
-    recent_logs = fetch_access_logs(mykad)[:5]
+    recent_logs = fetch_access_logs(mykad)[:4]
     
     return render_template('dashboard.html', user=user_data, logs=recent_logs)
 
@@ -797,19 +811,38 @@ def share():
     if not session.get('vault_access_granted'): 
         return redirect(url_for('login'))
     user_data, mykad = get_user_context()
-    active_shares = fetch_access_logs(mykad, log_status='ACTIVE')
+    
+    # Fetch actual active share sessions for the UI list
+    conn = get_db_connection()
+    active_shares = conn.execute('SELECT * FROM share_sessions WHERE sender_mykad = ? AND status = "ACTIVE" ORDER BY id DESC', (mykad,)).fetchall()
+    conn.close()
+    
+    # active_shares = fetch_access_logs(mykad, log_status='ACTIVE') # Old Log based approach
     return render_template('share.html', user = user_data, active_shares = active_shares)
 
 @app.route('/logs')
 def access_log(): 
     """
     Displays all access logs for the currently logged-in user.
+    Also fetches 'Managed Shares' created by this user.
     """
     if not session.get('vault_access_granted'): 
         return redirect(url_for('login'))
+        
     user_data, mykad = get_user_context()
+    
+    # 1. Fetch standard Audit Logs
     all_logs = fetch_access_logs(mykad)
-    return render_template('accessLog.html', user = user_data, logs = all_logs)
+    
+    # 2. Fetch User's Created Shares
+    conn = get_db_connection()
+    # Get all shares created by this user, ordered by newest first
+    my_shares = conn.execute('SELECT * FROM share_sessions WHERE sender_mykad = ? ORDER BY created_at DESC', (mykad,)).fetchall()
+    conn.close()
+    
+    shares_list = [dict(row) for row in my_shares]
+
+    return render_template('accessLog.html', user=user_data, logs=all_logs, my_shares=shares_list)
 
 @app.route('/my-face')
 def my_face():
@@ -857,13 +890,392 @@ def revoke_access(log_id):
     except Exception as e:
         return jsonify({'status': 'failure', 'message': str(e)}), 500
 
-@app.route('/logout')
+# --- SHARE CAPSULE LOGIC ---
+
+@app.route('/create_share', methods=['POST'])
+def create_share():
+    """
+    Creates a new share session and generates a dynamic OTP/QR.
+    """
+    if not session.get('vault_access_granted'):
+        return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 401
+
+    mykad = session.get('user_mykad')
+    recipient_type = request.form.get('recipient_type')
+    recipient_id = request.form.get('recipient_id')
+    
+    # Basic validation
+    if not recipient_type:
+        return jsonify({'status': 'failure', 'message': 'Recipient type required'}), 400
+    if recipient_type == 'Individual':
+        if not recipient_id:
+            return jsonify({'status': 'failure', 'message': 'Recipient ID required'}), 400
+            
+        # Validate Recipient Exists in DB
+        conn = get_db_connection()
+        recipient_exists = conn.execute('SELECT 1 FROM citizens WHERE mykad_number = ?', (recipient_id,)).fetchone()
+        conn.close()
+        
+        if not recipient_exists:
+             return jsonify({'status': 'failure', 'message': f'Recipient ID ({recipient_id}) not found in database.'}), 404
+             
+    # Capture Document Selections
+    # We look for specific keys expected from the frontend form
+    selected_docs = []
+    # Currently supported/hardcoded keys in share.html
+    if request.form.get('share_identity') == 'on': selected_docs.append('identity')
+    if request.form.get('share_license') == 'on': selected_docs.append('license')
+    if request.form.get('share_income') == 'on': selected_docs.append('income')
+    if request.form.get('share_birth') == 'on': selected_docs.append('birth')
+    if request.form.get('share_water') == 'on': selected_docs.append('water')
+    if request.form.get('share_oku') == 'on': selected_docs.append('oku')
+    
+    import json
+    shared_docs_json = json.dumps(selected_docs)
+
+    # Generate 6-digit OTP
+    otp_code = ''.join(random.choices(string.digits, k=6))
+    
+    # Store in DB
+    try:
+        conn = get_db_connection()
+        # Ensure column exists or handle error (Migration should have run)
+        cursor = conn.execute('''
+            INSERT INTO share_sessions (sender_mykad, recipient_type, recipient_id, otp_code, status, expires_at, shared_docs)
+            VALUES (?, ?, ?, ?, 'ACTIVE', datetime('now', '+1 hour'), ?)
+        ''', (mykad, recipient_type, recipient_id, otp_code, shared_docs_json))
+        share_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        log_action(mykad, "SHARE", f"Created Capsule for {recipient_type}:{recipient_id}", "System", "SUCCESS")
+        
+        return jsonify({'status': 'success', 'share_id': share_id, 'otp_code': otp_code})
+        
+    except Exception as e:
+        print(f"Share Creation Error: {e}")
+        return jsonify({'status': 'failure', 'message': str(e)}), 500
+
+@app.route('/share_status/<int:share_id>')
+def share_status(share_id):
+    """
+    Returns the current OTP and QR code for a share session.
+    Implements 60s rotation logic (simulated by re-generating if 'expired' logic met, 
+    but for now we keep simple static or simple time-based rotation).
+    User Requirement: "Refresh every 1 min".
+    """
+    if not session.get('vault_access_granted'):
+        return jsonify({'status': 'failure'}), 401
+        
+    conn = get_db_connection()
+    session_row = conn.execute('SELECT * FROM share_sessions WHERE id = ?', (share_id,)).fetchone()
+    
+    if not session_row or session_row['status'] != 'ACTIVE':
+        conn.close()
+        return jsonify({'status': 'expired'})
+    
+    # Dynamic Rotation Logic
+    # We check if the current OTP is older than 60 seconds.
+    # To support this without schema changes (complex), we'll hack it slightly:
+    # We will assume 'created_at' is the last update time (updating it on rotation).
+    
+    try:
+        current_time = datetime.datetime.now()
+        # Parse timestamp (SQLite format: YYYY-MM-DD HH:MM:SS)
+        last_updated_str = session_row['created_at'] 
+        
+        # Handle potential format differences
+        try:
+             last_updated = datetime.datetime.strptime(last_updated_str, '%Y-%m-%d %H:%M:%S')
+        except:
+             # Fallback if fraction included
+             last_updated = datetime.datetime.strptime(last_updated_str, '%Y-%m-%d %H:%M:%S.%f')
+
+        elapsed = (current_time - last_updated).total_seconds()
+        
+        current_otp = session_row['otp_code']
+        
+        if elapsed > 60:
+             # ROTATE!
+             new_otp = ''.join(random.choices(string.digits, k=6))
+             
+             # Update DB (Update created_at to now to reset timer)
+             # Note: We are repurposing created_at as 'last_updated' for this feature.
+             conn.execute('UPDATE share_sessions SET otp_code = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?', (new_otp, share_id))
+             conn.commit()
+             
+             current_otp = new_otp
+             print(f"DEBUG: Rotated OTP for Share {share_id} -> {new_otp}")
+    except Exception as e:
+        print(f"Rotation Logic Error: {e}")
+        current_otp = session_row['otp_code']
+
+    # QR Generation
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(current_otp)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Convert to base64
+    buffered = io.BytesIO()
+    img.save(buffered, format="PNG")
+    qr_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    
+    conn.close()
+    
+    return jsonify({
+        'status': 'active',
+        'code': current_otp,
+        'qr_image': f"data:image/png;base64,{qr_base64}",
+        'expires_in': 3600 # Mock
+    })
+
+@app.route('/receive_capsule')
+def receive_capsule():
+    """
+    Public page for recipients to enter the code.
+    """
+    # Attempt to get logged-in user, else Guest
+    user_context = {'full_name': 'Guest', 'mykad_number': '-'}
+    if session.get('vault_access_granted'):
+        u, _ = get_user_context()
+        if u: user_context = u
+            
+    return render_template('receive_capsule.html', user=user_context)
+
+@app.route('/redeem_share', methods=['POST'])
+def redeem_share():
+    """
+    Validates the 6-digit code and shows the documents.
+    """
+    share_code = request.form.get('share_code')
+    input_sender_id = request.form.get('sender_id') # New input
+    
+    conn = get_db_connection()
+    # Find session by OTP Code AND status ACTIVE
+    session_row = conn.execute('SELECT * FROM share_sessions WHERE otp_code = ? AND status = ?', (share_code, 'ACTIVE')).fetchone()
+    
+    if not session_row:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Invalid or expired code.'})
+        
+    # Validation: Check if input_sender_id matches actual sender
+    actual_sender_id = session_row['sender_mykad']
+    if input_sender_id and input_sender_id.strip() != actual_sender_id:
+         conn.close()
+         return jsonify({'status': 'error', 'message': 'Sender ID does not match the code provided.'})
+
+    # Verify Sender Exists in DB (Data Integrity Check)
+    sender = conn.execute('SELECT full_name, mykad_number FROM citizens WHERE mykad_number = ?', (actual_sender_id,)).fetchone()
+    if not sender:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Sender account no longer exists.'})
+    conn.close()
+    
+    # Return success and maybe the preview HTML directly or JSON payload
+    # In a real flow, we would set a session token for the guest and redirect them.
+    # For this demo, we can grant a temporary session variable.
+    session['guest_access'] = True
+    session['guest_sender_name'] = sender['full_name']
+    session['guest_sender_id'] = sender['mykad_number']
+    session['guest_share_id'] = session_row['id'] # Store ID for retrieval
+    
+    return jsonify({
+        'status': 'success',
+        'sender_name': sender['full_name'],
+        'sender_id': sender['mykad_number']
+    })
+
+@app.route('/view_capsule_content')
+def view_capsule_content():
+    if not session.get('guest_access'):
+        return redirect(url_for('receive_capsule'))
+        
+    sender = {
+        'full_name': session.get('guest_sender_name'),
+        'mykad_number': session.get('guest_sender_id'),
+        'address': 'KUALA LUMPUR (HIDDEN)',
+    }
+    
+    # Retrieve active session details to know what to show
+    # We need the 'share_id' or re-query by OTP if we stored it in session
+    # For MVP, let's assume we store share_id in session during redeem_share
+    
+    share_id = session.get('guest_share_id')
+    allowed_docs = []
+    session_otp = "UNKNOWN"
+    
+    if share_id:
+        conn = get_db_connection()
+        share_row = conn.execute('SELECT * FROM share_sessions WHERE id = ?', (share_id,)).fetchone()
+        conn.close()
+        
+        if share_row:
+            import json
+            try:
+                allowed_docs = json.loads(share_row['shared_docs']) if share_row['shared_docs'] else []
+            except:
+                allowed_docs = []
+            session_otp = share_row['otp_code']
+            
+            # LOG VIEW ACTION ONLY ONCE PER SESSION IF NEEDED
+            # For now, log every hit to track activity
+            # Context format: "ShareID:{id}" to easily filter later
+            log_action(share_row['sender_mykad'], "VIEW CAPSULE", f"ShareID:{share_id} - Accessed by recipient", "Secure Share", "SUCCESS")
+
+    return render_template('view_capsule.html', user=sender, allowed_docs=allowed_docs, session_otp=session_otp, share_id=share_id)
+
+
+@app.route('/logout', methods=['GET', 'POST'])
 def logout():
     """
     Logs out the current user by clearing all session data.
     """
     session.clear()
     return redirect(url_for('login'))
+
+
+# --- SECURED PDF DOWNLOAD ROUTE ---
+@app.route('/download_secured_doc/<int:share_id>/<string:doc_type>')
+def download_secured_doc(share_id, doc_type):
+    """
+    Generates a password-protected PDF for the requested document.
+    Password = Share OTP.
+    """
+    # 1. Verify Session/Access - Minimal check for demo/MVP
+    conn = get_db_connection()
+    share_row = conn.execute('SELECT * FROM share_sessions WHERE id = ?', (share_id,)).fetchone()
+    
+    if not share_row:
+        conn.close()
+        return "Share session not found", 404
+        
+    # Enforce ACTIVE status
+    if share_row['status'] != 'ACTIVE':
+        conn.close()
+        return "Access Revoked. This share session is no longer active.", 403
+        
+    # Check if doc_type is allowed
+    # Handle DB storing text vs actual json list
+    try:
+        allowed_docs = json.loads(share_row['shared_docs']) if share_row['shared_docs'] else []
+    except:
+        allowed_docs = [] # Fallback
+    
+    # Bypass check if list is empty (legacy shares) or strict check?
+    # Strict check: if not in list, deny.
+    if share_row['shared_docs'] and doc_type not in allowed_docs:
+        conn.close()
+        return "Document not shared or access denied.", 403
+
+    # 2. Fetch the Sender's Document Blob
+    sender_mykad = share_row['sender_mykad']
+    sender_row = conn.execute('SELECT * FROM citizens WHERE mykad_number = ?', (sender_mykad,)).fetchone()
+    conn.close()
+    
+    col_map = {
+        'identity': 'mykad_front_blob',
+        'license': 'driving_license_blob',
+        'income': 'income_slip_blob',
+        'birth': 'birth_cert_blob',
+        'water': 'water_bill_blob',
+        'oku': 'oku_card_blob'
+    }
+    
+    blob_col = col_map.get(doc_type)
+    if not blob_col or not sender_row[blob_col]:
+        return "Document source file not found.", 404
+
+    image_data = sender_row[blob_col]
+    
+    # 3. Generate PDF
+    packet = io.BytesIO()
+    can = canvas.Canvas(packet, pagesize=A4)
+    width, height = A4
+    
+    # Header
+    can.setFont("Helvetica-Bold", 16)
+    can.drawString(50, height - 50, f"Secured Document: {doc_type.upper()}")
+    can.setFont("Helvetica", 10)
+    can.drawString(50, height - 70, "Provide Share Code (OTP) to open.")
+    
+    # Image
+    try:
+        img_buffer = io.BytesIO(image_data)
+        img = ImageReader(img_buffer)
+        img_w, img_h = img.getSize()
+        aspect = img_h / float(img_w)
+        
+        draw_width = 500
+        draw_height = draw_width * aspect
+        
+        # Max height check
+        if draw_height > 600:
+             draw_height = 600
+             draw_width = draw_height / aspect
+
+        x_pos = (width - draw_width) / 2
+        y_pos = height - 120 - draw_height 
+        
+        can.drawImage(img, x_pos, y_pos, width=draw_width, height=draw_height)
+    except Exception as e:
+        can.drawString(50, height - 150, f"Error rendering image: {e}")
+
+    can.save()
+    packet.seek(0)
+    
+    # 4. Encrypt with OTP
+    new_pdf = PdfReader(packet)
+    writer = PdfWriter()
+    
+    for page in new_pdf.pages:
+        writer.add_page(page)
+        
+    password = str(share_row['otp_code']) # Ensure string
+    writer.encrypt(password)
+    
+    output_stream = io.BytesIO()
+    writer.write(output_stream)
+    output_stream.seek(0)
+    
+    # LOG DOWNLOAD ACTION
+    # Context format: "ShareID:{id}" to allows filtering
+    log_action(sender_mykad, "DOWNLOAD", f"ShareID:{share_id} - Downloaded {doc_type.upper()}", "Secure Share", "SUCCESS")
+    
+    return send_file(
+        output_stream,
+        as_attachment=True,
+        download_name=f"{doc_type}_secured.pdf",
+        mimetype='application/pdf'
+    )
+
+
+# --- SHARE REVOCATION ROUTES ---
+
+@app.route('/revoke_share/<int:share_id>', methods=['POST'])
+def revoke_share(share_id):
+    """
+    Revokes access to a share session by setting its status to REVOKED.
+    """
+    if not session.get('vault_access_granted'):
+         return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 401
+    
+    _, mykad = get_user_context()
+    conn = get_db_connection()
+    
+    # Verify ownership
+    share = conn.execute('SELECT * FROM share_sessions WHERE id = ? AND sender_mykad = ?', (share_id, mykad)).fetchone()
+    if not share:
+        conn.close()
+        return jsonify({'status': 'failure', 'message': 'Share session not found or access denied.'}), 404
+        
+    conn.execute("UPDATE share_sessions SET status = 'REVOKED' WHERE id = ?", (share_id,))
+    conn.commit()
+    conn.close()
+    
+    log_action(mykad, "REVOKE", f"Revoked Share ID {share_id}", "System", "SUCCESS")
+    
+    return jsonify({'status': 'success', 'message': 'Access revoked successfully.'})
 
 if __name__ == '__main__':
     print("-------------------------------------------------------")
