@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Security Logs | VerifyX{% endblock %}
+{% block title %}Security Logs & Shares | VerifyX{% endblock %}
 
 {% block styles %}
 <style>
     .page-header {
-        margin-bottom: 30px;
+        margin-bottom: 20px;
         display: flex;
         justify-content: space-between;
         align-items: flex-end;
@@ -22,7 +22,54 @@
         font-size: 14px;
     }
 
-    /* LOGS TABLE STYLE */
+    /* TABS */
+    .logs-tabs {
+        display: flex;
+        border-bottom: 1px solid #e2e8f0;
+        margin-bottom: 25px;
+        gap: 20px;
+    }
+
+    .tab-btn {
+        padding: 12px 5px;
+        background: none;
+        border: none;
+        font-size: 14px;
+        font-weight: 600;
+        color: #64748b;
+        cursor: pointer;
+        position: relative;
+        transition: 0.2s;
+    }
+
+    .tab-btn.active {
+        color: var(--gov-blue);
+    }
+
+    .tab-btn.active::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: var(--gov-blue);
+    }
+
+    .tab-btn:hover {
+        color: #334155;
+    }
+
+    .tab-panel {
+        display: none;
+        animation: fadeIn 0.3s;
+    }
+
+    .tab-panel.active {
+        display: block;
+    }
+
+    /* TABLE CARD */
     .table-card {
         background: white;
         border-radius: 12px;
@@ -61,7 +108,7 @@
         background-color: #fcfcfc;
     }
 
-    /* Table Column Styles */
+    /* COLUMNS */
     .org-cell {
         display: flex;
         align-items: center;
@@ -132,33 +179,79 @@
         color: #64748b;
     }
 
-    .btn-revoke {
+    .btn-action {
         background: white;
-        border: 1px solid var(--danger);
-        color: var(--danger);
+        border: 1px solid #e2e8f0;
+        color: #475569;
         padding: 8px 16px;
-        border-radius: 6px;
+        border-radius: 8px;
         cursor: pointer;
         font-size: 12px;
         font-weight: 600;
-        transition: 0.2s;
+        transition: all 0.2s ease;
+        margin-right: 20px;
         display: inline-flex;
         align-items: center;
         gap: 6px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .btn-action:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    .btn-history {
+        color: var(--gov-blue);
+        border-color: #bfdbfe;
+        background: linear-gradient(to bottom, #eff6ff, #dbeafe);
+    }
+
+    .btn-history:hover {
+        border-color: var(--gov-blue);
+    }
+
+    .btn-revoke {
+        color: #dc2626;
+        border-color: #fecaca;
+        background: linear-gradient(to bottom, #fef2f2, #fee2e2);
     }
 
     .btn-revoke:hover {
-        background: #fef2f2;
+        border-color: #dc2626;
+    }
+
+    #show-more-btn {
+        background: white;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        padding: 10px 20px;
+        border-radius: 30px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    #show-more-btn:hover {
+        border-color: #cbd5e1;
+        color: #334155;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
     }
 
     /* Toast Notification */
     #toast {
         visibility: hidden;
         min-width: 250px;
-        background-color: #333;
+        background-color: #1e293b;
         color: #fff;
         text-align: center;
-        border-radius: 2px;
+        border-radius: 8px;
         padding: 16px;
         position: fixed;
         z-index: 1000;
@@ -166,6 +259,7 @@
         bottom: 30px;
         transform: translateX(-50%);
         font-size: 14px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
     }
 
     #toast.show {
@@ -196,14 +290,30 @@
             opacity: 0;
         }
     }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .hidden-log {
+        display: none;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div>
-        <h1>Access Logs & Permissions</h1>
-        <p>Audit trail of all third-party access attempts and active sessions.</p>
+        <h1>Access Control Center</h1>
+        <p>Manage active shares and audit access logs from third parties.</p>
     </div>
     <div style="text-align: right;">
         <span
@@ -213,80 +323,171 @@
     </div>
 </div>
 
-<!-- ACCESS TABLE -->
-<div class="table-card">
-    <table>
-        <thead>
-            <tr>
-                <th style="width: 25%;">Organization</th>
-                <th style="width: 35%;">Permissions & Context</th>
-                <th style="width: 15%;">Access Time</th>
-                <th style="width: 10%;">Status</th>
-                <th style="width: 15%;">Action</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for log in logs %}
-            <tr {% if log.status=='FAILED' or log.status=='BLOCKED' %}style="background-color: #fff1f2;" {% endif %}>
-                <td>
-                    <div class="org-cell">
-                        <div class="org-icon">
-                            {% if log.organization_name == 'System' %}
-                            <i class="fas fa-desktop"></i>
-                            {% elif 'Bank' in log.organization_name %}
-                            <i class="fas fa-university"></i>
-                            {% elif 'Rental' in log.organization_name %}
-                            <i class="fas fa-home"></i>
-                            {% elif 'Touch' in log.organization_name %}
-                            <i class="fas fa-wallet"></i>
-                            {% elif 'LHDN' in log.organization_name %}
-                            <i class="fas fa-building-columns"></i>
-                            {% else %}
-                            <i class="fas fa-link"></i>
-                            {% endif %}
+<div class="logs-tabs">
+    <button class="tab-btn active" onclick="switchTab('shares')">My Managed Shares</button>
+    <button class="tab-btn" onclick="switchTab('audit')">Audit Logs</button>
+</div>
+
+<!-- PANEL 1: MANAGED SHARES -->
+<div id="tab-shares" class="tab-panel active">
+    {% set active_shares = [] %}
+    {% for share in my_shares %}
+    {% if share.status == 'ACTIVE' %}
+    {% set _ = active_shares.append(share) %}
+    {% endif %}
+    {% endfor %}
+
+    {% if not active_shares %}
+    <div
+        style="text-align: center; padding: 60px; color: #94a3b8; background: white; border-radius: 12px; border: 1px dashed #cbd5e1;">
+        <i class="fas fa-folder-open" style="font-size: 32px; margin-bottom: 10px; opacity: 0.5;"></i>
+        <p>No active share capsules found.</p>
+        <a href="{{ url_for('share_capsule') }}"
+            style="display: inline-block; margin-top: 10px; color: var(--gov-blue); font-weight: 600; text-decoration: none;">Create
+            New Share &rarr;</a>
+    </div>
+    {% else %}
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 25%;">Recipient</th>
+                    <th style="width: 20%;">Pass Code (OTP)</th>
+                    <th style="width: 20%;">Expires At</th>
+                    <th style="width: 15%;">Status</th>
+                    <th style="width: 20%;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for share in active_shares %}
+                <tr>
+                    <td>
+                        <div class="org-cell">
+                            <div class="org-icon" style="background: #f0fdf4; color: #16a34a;">
+                                <i class="fas fa-share-nodes"></i>
+                            </div>
+                            <div>
+                                <span class="org-name">{{ share.recipient_type }}</span>
+                                <span class="access-id">{{ share.recipient_id }}</span>
+                            </div>
                         </div>
-                        <div>
-                            <span class="org-name">{{ log.organization_name }}</span>
-                            <span class="access-id">Log ID: #{{ log.id }} ({{ log.action }})</span>
+                    </td>
+                    <td
+                        style="font-family: monospace; font-size: 14px; font-weight: 700; color: #334155; letter-spacing: 1px;">
+                        {{ share.otp_code }}
+                    </td>
+                    <td style="color: #64748b; font-size: 13px;">{{ share.expires_at }}</td>
+                    <td>
+                        <span class="status-badge status-active">Active</span>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 20px; align-items: center;">
+                            <button class="btn-action btn-history" onclick="filterLogsByShare('{{ share.id }}')"
+                                style="margin-right: 0;">
+                                <i class="fas fa-history"></i> History
+                            </button>
+                            <button class="btn-action btn-revoke" onclick="revokeShare('{{ share.id }}', this)"
+                                style="margin-right: 0;">
+                                <i class="fas fa-ban"></i> Revoke
+                            </button>
                         </div>
-                    </div>
-                </td>
-                <td>
-                    <span class="perm-tag">
-                        {% if 'login' in log.action|lower %}<i class="fas fa-sign-in-alt"></i>
-                        {% elif 'share' in log.action|lower %}<i class="fas fa-user-check"></i>
-                        {% else %}<i class="fas fa-tag"></i>{% endif %}
-                        {{ log.context }}
-                    </span>
-                    <div style="font-size: 11px; color: #64748b; margin-top: 5px;">
-                        {% if log.status == 'ACTIVE' %}Access granted for {{ log.organization_name }}
-                        {% else %}Record Status: {{ log.status }}{% endif %}
-                    </div>
-                </td>
-                <td style="color: #475569; font-size: 13px; font-weight: 500;">{{ log.timestamp }}</td>
-                <td>
-                    {% if log.status == 'ACTIVE' %}
-                    <span class="status-badge status-active"><i class="fas fa-circle" style="font-size: 6px;"></i>
-                        Active</span>
-                    {% elif log.status == 'REVOKED' or log.status == 'BLOCKED' or log.status == 'FAILED' %}
-                    <span class="status-badge status-revoked"><i class="fas fa-ban"></i> {{ log.status|upper }}</span>
-                    {% else %}
-                    <span class="status-badge status-expired">{{ log.status|upper }}</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if log.status == 'ACTIVE' %}
-                    <button class="btn-revoke" data-log-id="{{ log.id }}" onclick="revokeAccess(this)">
-                        <i class="fas fa-power-off"></i> Revoke
-                    </button>
-                    {% else %}
-                    <button class="btn-revoke" style="opacity:0.5; cursor:not-allowed;" disabled>Terminated</button>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+<!-- PANEL 2: AUDIT LOGS -->
+<div id="tab-audit" class="tab-panel">
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 25%;">Organization</th>
+                    <th style="width: 35%;">Permissions & Context</th>
+                    <th style="width: 15%;">Access Time</th>
+                    <th style="width: 10%;">Status</th>
+                    <th style="width: 15%;">Action</th>
+                </tr>
+            </thead>
+            <tbody id="audit-log-body">
+                {% for log in logs %}
+                <tr class="log-row {% if loop.index > 10 %}hidden-log{% endif %}" data-context="{{ log.context }}" {% if
+                    log.status=='FAILED' or log.status=='BLOCKED' %}style="background-color: #fff1f2;" {% endif %}>
+                    <td>
+                        <div class="org-cell">
+                            <div class="org-icon">
+                                {% if log.organization_name == 'System' %}
+                                <i class="fas fa-desktop"></i>
+                                {% elif 'Bank' in log.organization_name %}
+                                <i class="fas fa-university"></i>
+                                {% elif 'Rental' in log.organization_name %}
+                                <i class="fas fa-home"></i>
+                                {% elif 'Touch' in log.organization_name %}
+                                <i class="fas fa-wallet"></i>
+                                {% elif 'LHDN' in log.organization_name %}
+                                <i class="fas fa-building-columns"></i>
+                                {% else %}
+                                <i class="fas fa-link"></i>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <span class="org-name">{{ log.organization_name }}</span>
+                                <span class="access-id">Log ID: #{{ log.id }} ({{ log.action }})</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="perm-tag">
+                            {% if 'login' in log.action|lower %}<i class="fas fa-sign-in-alt"></i>
+                            {% elif 'share' in log.action|lower %}<i class="fas fa-user-check"></i>
+                            {% elif 'view' in log.action|lower %}<i class="fas fa-eye"></i>
+                            {% elif 'download' in log.action|lower %}<i class="fas fa-download"></i>
+                            {% else %}<i class="fas fa-tag"></i>{% endif %}
+                            {{ log.context }}
+                        </span>
+                        <div style="font-size: 11px; color: #64748b; margin-top: 5px;">
+                            Record Status: {{ log.status }}
+                        </div>
+                    </td>
+                    <td style="color: #475569; font-size: 13px; font-weight: 500;">{{ log.timestamp }}</td>
+                    <td>
+                        {% if log.status == 'ACTIVE' %}
+                        <span class="status-badge status-active"><i class="fas fa-circle" style="font-size: 6px;"></i>
+                            Active</span>
+                        {% elif log.status == 'REVOKED' or log.status == 'BLOCKED' or log.status == 'FAILED' %}
+                        <span class="status-badge status-revoked"><i class="fas fa-ban"></i> {{ log.status|upper
+                            }}</span>
+                        {% else %}
+                        <span class="status-badge status-success">{{ log.status|upper }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if log.status == 'ACTIVE' %}
+                        <button class="btn-action btn-revoke" data-log-id="{{ log.id }}" onclick="revokeAccess(this)">
+                            <i class="fas fa-power-off"></i> Revoke
+                        </button>
+                        {% else %}
+                        <span style="font-size:11px; color:#aaa;">Archived</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if logs|length > 10 %}
+        <div style="text-align: center; padding: 15px; border-top: 1px solid #f1f5f9;">
+            <button id="show-more-btn" onclick="showMoreLogs()"
+                style="border:none; background:transparent; color:#64748b; font-size:13px; cursor:pointer; font-weight:600;">
+                <i class="fas fa-chevron-down"></i> Show Previous History
+            </button>
+        </div>
+        {% endif %}
+    </div>
 </div>
 
 <div id="toast"></div>
@@ -301,43 +502,123 @@
         setTimeout(function () { x.className = x.className.replace("show", ""); }, 3000);
     }
 
-    async function revokeAccess(button) {
-        const logId = button.getAttribute('data-log-id');
-        if (!confirm(`Are you sure you want to revoke access for Log ID #${logId}?`)) {
-            return;
+    function showMoreLogs() {
+        // Get all currently hidden log rows
+        const hiddenLogs = document.querySelectorAll('.hidden-log');
+        let count = 0;
+        const LIMIT = 10;
+
+        // Show the next 10 items
+        for (let i = 0; i < hiddenLogs.length; i++) {
+            if (count >= LIMIT) break;
+            hiddenLogs[i].classList.remove('hidden-log');
+            count++;
         }
 
-        try {
-            // Ensure this matches server route
-            const response = await fetch(`/revoke_access/${logId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
+        // Check if there are ANY hidden logs left after this operation
+        // If 0, hide the "Show More" button entirely
+        if (document.querySelectorAll('.hidden-log').length === 0) {
+            const btn = document.getElementById('show-more-btn');
+            if (btn) btn.style.display = 'none';
+        }
+    }
+
+    // TAB SWITCHING
+    function switchTab(tabName) {
+        // Hide all
+        document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+        // Show specific
+        document.getElementById('tab-' + tabName).classList.add('active');
+        // Find button (simple hack based on order or name, but let's iterate)
+        const buttons = document.querySelectorAll('.tab-btn');
+        if (tabName === 'shares') buttons[0].classList.add('active');
+        if (tabName === 'audit') buttons[1].classList.add('active');
+    }
+
+    // LOG FILTERING LOGIC
+    function filterLogsByShare(shareId) {
+        // 1. First, check if there are matches BEFORE switching tabs
+        const allRows = document.querySelectorAll('.log-row');
+        let matchCount = 0;
+
+        // We need to check all rows (even hidden ones)
+        // Note: We don't modify DOM display yet, just count
+        allRows.forEach(row => {
+            const context = row.getAttribute('data-context') || "";
+            if (context.includes('ShareID:' + shareId)) {
+                matchCount++;
+            }
+        });
+
+        if (matchCount === 0) {
+            showToast("No history events found for this share yet.");
+            return; // EXIT: Do not switch tab
+        }
+
+        // 2. If matches found, switch and filter
+        switchTab('audit');
+
+        // Ensure all logs are potentially visible logic-wise (remove pagination hiding)
+        // so that the filter can show them even if they were on page 2
+        // We just unhide EVERYTHING to be safe and simple
+        const hiddenLogs = document.querySelectorAll('.hidden-log');
+        hiddenLogs.forEach(h => h.classList.remove('hidden-log'));
+
+        // Hide "Show More" button since we are now in a filtered view
+        const btn = document.getElementById('show-more-btn');
+        if (btn) btn.style.display = 'none';
+
+        // 3. Apply the filter
+        allRows.forEach(row => {
+            const context = row.getAttribute('data-context') || "";
+            if (context.includes('ShareID:' + shareId)) {
+                row.style.display = 'table-row';
+                row.style.backgroundColor = '#ecfeff'; // Highlight
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        showToast(`Found ${matchCount} history event(s).`);
+    }
+
+    function revokeShare(shareId, btn) {
+        if (!confirm("Are you sure you want to revoke this share? Recipient will effectively be blocked immediately.")) return;
+
+        fetch('/revoke_share/' + shareId, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast("Share Revoked Successfully");
+                    btn.closest('tr').querySelector('.status-badge').className = "status-badge status-revoked";
+                    btn.closest('tr').querySelector('.status-badge').innerText = "REVOKED";
+                    btn.remove();
+                } else {
+                    showToast("Error: " + data.message);
                 }
             });
+    }
 
+    async function revokeAccess(button) {
+        const logId = button.getAttribute('data-log-id');
+        if (!confirm(`Are you sure you want to revoke access?`)) return;
+
+        try {
+            const response = await fetch(`/revoke_access/${logId}`, { method: 'POST' });
             const data = await response.json();
-
             if (response.ok) {
                 showToast(data.message);
-
-                // Update UI immediately
-                const row = button.closest('tr');
-
-                // Change status badge
-                const statusCell = row.querySelector('td:nth-child(4)');
-                statusCell.innerHTML = '<span class="status-badge status-revoked"><i class="fas fa-ban"></i> REVOKED</span>';
-
-                // Disable the button
-                const actionCell = row.querySelector('td:nth-child(5)');
-                actionCell.innerHTML = '<button class="btn-revoke" style="opacity:0.5; cursor:not-allowed;" disabled>Terminated</button>';
-
+                button.closest('tr').querySelector('.status-badge').className = "status-badge status-revoked";
+                button.closest('tr').querySelector('.status-badge').innerText = "REVOKED";
+                button.remove();
             } else {
-                showToast(`Error: ${data.message || 'Failed to revoke access.'}`);
+                showToast(data.message);
             }
         } catch (error) {
-            console.error('Revocation Error:', error);
-            showToast('A network error occurred.');
+            console.error(error);
+            showToast('Network error.');
         }
     }
 </script>

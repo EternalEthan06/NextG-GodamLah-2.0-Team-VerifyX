@@ -36,14 +36,15 @@
 
         /* --- SIDEBAR --- */
         .sidebar {
-            width: 280px;
+            width: 260px;
+            /* Slightly narrower */
             background-color: white;
             border-right: 1px solid #e5e7eb;
             display: flex;
             flex-direction: column;
-            padding: 20px;
+            padding: 15px;
+            /* Reduced from 20px */
             box-shadow: 2px 0 5px rgba(0, 0, 0, 0.02);
-            /* Ensure sidebar is always visible if body has overflow hidden */
             height: 100vh;
         }
 
@@ -51,12 +52,13 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
+            /* Reduced from 30px */
             color: var(--gov-blue);
         }
 
         .logo-area i {
-            font-size: 24px;
+            font-size: 22px;
         }
 
         .logo-area h2 {
@@ -68,53 +70,78 @@
         .user-widget {
             background: linear-gradient(135deg, var(--gov-blue), var(--gov-dark));
             color: white;
-            padding: 20px;
+            padding: 15px;
+            /* Reduced from 20px */
             border-radius: 12px;
             text-align: center;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
+            /* Reduced from 25px */
             box-shadow: 0 4px 6px rgba(0, 51, 102, 0.2);
+            flex-shrink: 0;
+            /* Prevent shrinking */
         }
 
         .user-avatar {
-            width: 70px;
-            height: 70px;
+            width: 50px;
+            /* Reduced from 70px */
+            height: 50px;
+            /* Reduced from 70px */
             background-color: white;
             border-radius: 50%;
-            margin: 0 auto 10px;
+            margin: 0 auto 8px;
+            /* Reduced margin */
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 3px solid var(--gov-gold);
-            font-size: 30px;
+            border: 2px solid var(--gov-gold);
+            font-size: 24px;
+            /* Reduced icon size */
             color: var(--gov-blue);
         }
 
         .user-widget h3 {
-            font-size: 16px;
-            margin-bottom: 5px;
+            font-size: 14px;
+            /* Reduced from 16px */
+            margin-bottom: 2px;
+            /* Tighter spacing */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .user-widget p {
             font-size: 12px;
-            opacity: 0.8;
-            margin-bottom: 15px;
+            opacity: 1 !important;
+            color: #ffffff !important;
+            font-weight: 500;
+            margin-bottom: 10px;
         }
 
         .security-badges {
             display: flex;
             justify-content: center;
-            gap: 8px;
-            margin-top: 10px;
+            gap: 6px;
+            margin-top: 5px;
         }
 
         .badge {
-            font-size: 10px;
-            padding: 4px 8px;
+            font-size: 9px;
+            /* Reduced from 10px */
+            padding: 3px 6px;
             background: rgba(255, 255, 255, 0.2);
             border-radius: 20px;
             display: flex;
             align-items: center;
-            gap: 4px;
+            gap: 3px;
+        }
+
+        /* Badge Colors */
+        .badge.verified,
+        .badge.secured {
+            background: rgba(255, 255, 255, 0.15);
+            color: #f3f4f6;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: none;
         }
 
         /* Navigation */
@@ -122,23 +149,28 @@
             list-style: none;
             flex: 1;
             overflow-y: auto;
-            /* Allow scrolling if menu is too long */
+            margin-bottom: 10px;
         }
 
         .nav-item {
-            margin-bottom: 5px;
+            margin-bottom: 2px;
+            /* Reduced from 5px */
         }
 
         .nav-link {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 12px 15px;
+            gap: 10px;
+            /* Reduced gap */
+            padding: 10px 12px;
+            /* Reduced padding from 12px 15px */
             text-decoration: none;
             color: var(--text-light);
             border-radius: 8px;
             font-weight: 500;
             transition: all 0.2s;
+            font-size: 14px;
+            /* Explicit font size */
         }
 
         .nav-link:hover,
@@ -148,25 +180,29 @@
         }
 
         .nav-link.active {
-            border-left: 4px solid var(--gov-blue);
+            border-left: 3px solid var(--gov-blue);
+            /* Thinner border */
         }
 
         /* Logout Section */
         .logout-area {
             border-top: 1px solid #e5e7eb;
-            padding-top: 20px;
+            padding-top: 15px;
+            /* Reduced from 20px */
         }
 
         .logout-link {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 12px 15px;
+            gap: 10px;
+            padding: 10px 12px;
+            /* Matches nav-link */
             text-decoration: none;
             color: var(--danger);
             border-radius: 8px;
             font-weight: 500;
             transition: all 0.2s;
+            font-size: 14px;
         }
 
         .logout-link:hover {
@@ -222,10 +258,10 @@
             <p>{{ user.mykad_number }}</p>
 
             <div class="security-badges">
-                <div class="badge">
+                <div class="badge verified">
                     <i class="fas fa-check-circle"></i> Verified
                 </div>
-                <div class="badge">
+                <div class="badge secured">
                     <i class="fas fa-lock"></i> Secured
                 </div>
             </div>
@@ -253,6 +289,13 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a href="{{ url_for('receive_capsule') }}"
+                    class="nav-link {% if request.endpoint == 'receive_capsule' %}active{% endif %}">
+                    <i class="fas fa-box-open"></i>
+                    Receive Capsule
+                </a>
+            </li>
+            <li class="nav-item">
                 <a href="{{ url_for('access_log') }}"
                     class="nav-link {% if request.endpoint == 'access_log' %}active{% endif %}">
                     <i class="fas fa-history"></i>
@@ -269,7 +312,8 @@
         </ul>
 
         <div class="logout-area">
-            <a href="{{ url_for('logout') }}" class="logout-link">
+            <a href="{{ url_for('logout') }}" class="logout-link"
+                onclick="return confirm('Are you sure you want to log out?');">
                 <i class="fas fa-sign-out-alt"></i>
                 Logout
             </a>
@@ -307,6 +351,12 @@
 
     <!-- INACTIVITY MONITOR SCRIPT -->
     <script>
+        // GLOBAL LOGOUT CONFIRMATION
+        function confirmLogout(event) {
+            if (!confirm("Are you sure you want to log out?")) {
+                event.preventDefault();
+            }
+        }
         let warningTimer, logoutTimer;
         // 5 Minutes = 300,000 ms
         // Warning at 4m 30s = 270,000 ms
@@ -349,6 +399,33 @@
             fetch(window.location.href);
             resetTimers();
         }
+
+        // AUTO-LOGOUT ON TAB CLOSE
+        let isInternalExit = false;
+
+        // Mark internal links
+        document.addEventListener('click', function (e) {
+            let target = e.target.closest('a');
+            if (target && target.href && !target.href.startsWith('#')) {
+                isInternalExit = true;
+            }
+            if (e.target.closest('button') || e.target.closest('input[type="submit"]')) {
+                isInternalExit = true;
+            }
+        });
+
+        // Mark form submissions
+        document.addEventListener('submit', function () {
+            isInternalExit = true;
+        });
+
+        // Trigger Logout on Tab Close/Navigation Away
+        window.addEventListener('pagehide', function () {
+            if (!isInternalExit) {
+                // Use Beacon to ensure request is sent even if page closes
+                navigator.sendBeacon("{{ url_for('logout') }}");
+            }
+        });
 
         // Event Listeners for Activity
         window.onload = resetTimers;

@@ -360,6 +360,7 @@
     const modal = document.getElementById('previewModal');
     const title = document.getElementById('modalTitle');
     const body = document.getElementById('modalBody');
+    let currentViewKey = null;
 
     // MOCK DATA for Previews - Now dynamic with Jinja
     const docs = {
@@ -368,6 +369,7 @@
             source: 'JPN Database',
             icon: 'fa-id-card',
             color: '#003366',
+            share_key: 'identity',
             fields: [
                 { label: 'Full Name', value: '{{ user.full_name | upper }}' },
                 { label: 'MyKad No', value: '{{ user.mykad_number }}' },
@@ -380,6 +382,7 @@
             source: 'JPJ Database',
             icon: 'fa-car',
             color: '#333',
+            share_key: 'license',
             fields: [
                 { label: 'Name', value: '{{ user.full_name | upper }}' },
                 { label: 'Validity', value: '15 JAN 2028' },
@@ -391,6 +394,7 @@
             source: 'LHDN e-Filing',
             icon: 'fa-file-invoice',
             color: '#10b981',
+            share_key: 'income',
             fields: [
                 { label: 'Name', value: '{{ user.full_name | upper }}' },
                 { label: 'Assessment Year', value: '2023' },
@@ -403,6 +407,7 @@
             source: 'UNIVERSITY MALAYA',
             icon: 'fa-university',
             color: '#dba914',
+            share_key: 'transcript',
             fields: [
                 { label: 'Student', value: '{{ user.full_name | upper }}' },
                 { label: 'Program', value: 'BACHELOR OF COMPUTER SCIENCE' },
@@ -415,6 +420,7 @@
             source: 'MINISTRY OF HEALTH (MOH)',
             icon: 'fa-syringe',
             color: '#be123c',
+            share_key: 'vaccine',
             fields: [
                 { label: 'Name', value: '{{ user.full_name | upper }}' },
                 { label: 'Status', value: 'FULLY VACCINATED' },
@@ -427,6 +433,7 @@
             source: 'KUMPULAN WANG SIMPANAN PEKERJA',
             icon: 'fa-coins',
             color: '#104099',
+            share_key: 'epf',
             fields: [
                 { label: 'Name', value: '{{ user.full_name | upper }}' },
                 { label: 'Member ID', value: '12234455' },
@@ -438,6 +445,7 @@
             source: 'JPN',
             icon: 'fa-baby',
             color: '#003366',
+            share_key: 'birth',
             fields: [
                 { label: 'Name', value: '{{ user.full_name | upper }}' },
                 { label: 'Date of Birth', value: '{{ user.mykad_number[0:2] }}-{{ user.mykad_number[2:4] }}-{{ user.mykad_number[4:6] }}' },
@@ -449,6 +457,7 @@
             source: 'AIR SELANGOR',
             icon: 'fa-water',
             color: '#3498db',
+            share_key: null, // Not shareable yet
             fields: [
                 { label: 'Name', value: '{{ user.full_name | upper }}' },
                 { label: 'Account No', value: '2001992221' },
@@ -460,6 +469,7 @@
             source: 'JKM',
             icon: 'fa-wheelchair',
             color: '#purple',
+            share_key: null,
             fields: [
                 { label: 'Name', value: '{{ user.full_name | upper }}' },
                 { label: 'Category', value: 'PHYSICAL' },
@@ -469,13 +479,14 @@
     };
 
     function openPreview(key) {
-        // Normalize key if passed loosely (e.g. handle undefined map keys gently)
-        // Just basic mapping for demo keys that might not match perfectly
+        // Normalize key if passed loosely
         if (key.includes('birth')) key = 'birth_certificate';
         if (key.includes('water')) key = 'water_bill';
         if (key.includes('oku')) key = 'oku_status_card';
 
+        currentViewKey = key;
         const data = docs[key];
+
         if (!data) {
             console.error("No data for " + key);
             return;
@@ -510,11 +521,32 @@
         html += `</div>`;
 
         body.innerHTML = html;
+
+        // Update Share Button Visibility/Action
+        const shareBtn = document.querySelector('.share-btn');
+        if (data.share_key) {
+            shareBtn.style.display = 'block';
+            shareBtn.onclick = () => shareCurrentDoc();
+        } else {
+            shareBtn.style.display = 'none'; // Hide if not mapped to share page
+        }
+
         modal.classList.add('active');
+    }
+
+    function shareCurrentDoc() {
+        if (!currentViewKey) return;
+        const data = docs[currentViewKey];
+        if (data && data.share_key) {
+            window.location.href = "{{ url_for('share') }}?preselect_doc=" + data.share_key;
+        } else {
+            alert("This document cannot be shared via Capsule yet.");
+        }
     }
 
     function closePreview() {
         modal.classList.remove('active');
+        currentViewKey = null;
     }
 
     // Close on outside click

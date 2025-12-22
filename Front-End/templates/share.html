@@ -157,6 +157,81 @@
         opacity: 0.5;
     }
 
+    /* --- RECIPIENT INPUT STYLING --- */
+    .fancy-input-group {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 5px;
+        transition: 0.2s;
+        display: flex;
+        align-items: center;
+    }
+
+    .fancy-input-group:focus-within {
+        border-color: var(--gov-blue);
+        box-shadow: 0 0 0 3px rgba(22, 59, 130, 0.1);
+        background: white;
+    }
+
+    .fancy-input-group i {
+        color: #94a3b8;
+        padding: 0 15px;
+        font-size: 16px;
+    }
+
+    .fancy-input-group input {
+        border: none;
+        background: transparent;
+        padding: 12px 0;
+        font-size: 15px;
+        width: 100%;
+        outline: none;
+        color: #333;
+        font-weight: 500;
+    }
+
+    .countdown-circle {
+        position: relative;
+        width: 60px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 10px;
+    }
+
+    .countdown-svg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+    }
+
+    .countdown-circle-bg {
+        fill: none;
+        stroke: #eee;
+        stroke-width: 4;
+    }
+
+    .countdown-circle-path {
+        fill: none;
+        stroke: var(--gov-blue);
+        stroke-width: 4;
+        stroke-dasharray: 176;
+        /* 2 * PI * 28 */
+        stroke-dashoffset: 0;
+        transition: stroke-dashoffset 1s linear;
+    }
+
+    .countdown-text {
+        font-size: 14px;
+        font-weight: bold;
+        color: #333;
+    }
+
     .btn-share {
         width: 100%;
         padding: 15px;
@@ -294,6 +369,8 @@
 
 {% block content %}
 <div class="container">
+
+    <!-- LEFT PANEL: TABS + FORMS (Wrapped in .form-panel for layout) -->
     <div class="form-panel">
         <div class="header" style="margin-bottom: 20px;">
             <h2><i class="fas fa-shield-halved"></i> Share Capsule</h2>
@@ -301,18 +378,30 @@
         </div>
 
         <form action="/create_share" method="POST">
-
+            <!-- EXISTING FORM CONTENT PRESERVED -->
             <div class="input-group">
-                <label class="section-label">Recipient</label>
-                <select name="recipient" required>
-                    <option value="" disabled selected>Select Recipient...</option>
-                    <option value="Speedhome Rental">Speedhome Rental (Landlord)</option>
-                    <option value="Public Bank">Public Bank (Loans)</option>
-                    <option value="University Malaya">University Malaya</option>
-                </select>
+                <label class="section-label">Recipient Type</label>
+                <div class="fancy-input-group">
+                    <i class="fas fa-user-tag"></i>
+                    <select name="recipient_type" id="recipientType" onchange="toggleRecipientInput()" required
+                        style="border:none; padding:12px 0; width:100%; outline:none; background:transparent;">
+                        <option value="" disabled selected>Select Recipient Type...</option>
+                        <option value="Individual">Individual (Citizen)</option>
+                        <option value="Government">Government Agency</option>
+                        <option value="Private">Private Company</option>
+                    </select>
+                </div>
             </div>
 
-            <label class="section-label">Access Window</label>
+            <div class="input-group" id="recipientInputGroup" style="display:none; margin-top: 15px;">
+                <label class="section-label" id="recipientLabel">Recipient ID</label>
+                <div class="fancy-input-group">
+                    <i class="fas fa-id-card-clip"></i>
+                    <input type="text" name="recipient_id" id="recipientId" placeholder="Enter ID...">
+                </div>
+            </div>
+
+            <label class="section-label" style="margin-top:20px">Access Window</label>
             <div class="datetime-grid">
                 <div>
                     <label style="font-size:10px; color:#888;">Start Date</label>
@@ -336,6 +425,10 @@
 
             <label class="section-label" style="margin-top:20px;">Documents (7 Available)</label>
 
+            <!-- PERMISSION ITEMS (Truncated for brevity in replacement, ideally specific replacement) -->
+            <!-- But we need to wrap the whole form area to put it in a tab -->
+
+            <!-- RE-INSERTING PERMISSION ITEMS FOR CONTEXT -->
             <div class="permission-item active" data-doc-type="identity" onclick="showPreview('identity', this)">
                 <div class="perm-info">
                     <h4><i class="fas fa-id-card"></i> Identity Card</h4>
@@ -406,7 +499,7 @@
                 </label>
             </div>
 
-            <button type="submit" class="btn-share">Share to Party</button>
+            <button type="button" class="btn-share" onclick="submitShare()">Generate Share Capsule</button>
         </form>
     </div>
 
@@ -438,6 +531,48 @@
         </div>
     </div>
 </div>
+
+<!-- SUCCESS MODAL -->
+<div id="shareModal" class="modal"
+    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center;">
+    <div
+        style="background:white; padding:40px; border-radius:16px; width:400px; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.2);">
+        <div
+            style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; margin-bottom:20px;">
+            <div class="countdown-circle" style="margin:0;">
+                <svg class="countdown-svg">
+                    <circle class="countdown-circle-bg" cx="30" cy="30" r="28"></circle>
+                    <circle class="countdown-circle-path" id="countdownPath" cx="30" cy="30" r="28"></circle>
+                </svg>
+                <div class="countdown-text" id="countdownText">60</div>
+            </div>
+            <div style="font-size:12px; color:#999; text-align:center; font-weight:500;">
+                Seconds Remaining
+            </div>
+        </div>
+        <h2 style="color:var(--gov-blue); margin-top:0;">Share Active!</h2>
+        <p style="color:#666; font-size:14px;">The recipient can scan this QR or enter the code below.</p>
+
+        <div id="qrContainer"
+            style="margin:20px 0; border:1px solid #eee; padding:10px; display:inline-block; border-radius:8px;">
+            <!-- QR Image injected here -->
+            <img id="qrImage" src="" width="180">
+        </div>
+
+        <div style="background:#f1f5f9; padding:15px; border-radius:8px; margin-bottom:20px;">
+            <div style="font-size:12px; color:#888; text-transform:uppercase; font-weight:bold;">Share Code</div>
+            <div id="otpCode"
+                style="font-size:32px; font-weight:900; letter-spacing:5px; color:#333; font-family:monospace;">
+                ------
+            </div>
+
+
+        </div>
+
+        <button onclick="closeModal()"
+            style="background:#eee; color:#333; border:none; padding:10px 20px; border-radius:6px; cursor:pointer;">Close</button>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -446,6 +581,156 @@
     const today = new Date().toISOString().split('T')[0];
     document.querySelector('input[name="start_date"]').value = today;
     document.querySelector('input[name="end_date"]').value = today;
+
+    // --- HANDLE DIRECT SHARE PRE-SELECTION ---
+    document.addEventListener("DOMContentLoaded", () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const preselectKey = urlParams.get('preselect_doc');
+
+        if (preselectKey) {
+            // Find the permission item
+            const item = document.querySelector(`.permission-item[data-doc-type="${preselectKey}"]`);
+            if (item) {
+                // 1. Scroll into view
+                item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                // 2. Trigger Preview
+                showPreview(preselectKey, item);
+
+                // 3. Check the checkbox (if not disabled/identity)
+                const checkbox = item.querySelector('input[type="checkbox"]');
+                if (checkbox && !checkbox.disabled) {
+                    checkbox.checked = true;
+                    // Trigger slider visual change if needed (but CSS handles :checked)
+                }
+            }
+        }
+    });
+
+    // --- NEW SHARE LOGIC ---
+    function toggleRecipientInput() {
+        const type = document.getElementById('recipientType').value;
+        const group = document.getElementById('recipientInputGroup');
+        const label = document.getElementById('recipientLabel');
+        const input = document.getElementById('recipientId');
+
+        if (type === 'Individual') {
+            group.style.display = 'block';
+            label.innerText = 'Recipient MyKad Number';
+            input.placeholder = 'e.g. 123456-78-1234';
+        } else if (type === 'Government') {
+            group.style.display = 'block';
+            label.innerText = 'Agency Code';
+            input.placeholder = 'e.g. JPN-8821';
+        } else if (type === 'Private') {
+            group.style.display = 'block';
+            label.innerText = 'Company Registration No';
+            input.placeholder = 'e.g. 199901012345 (45678-A)';
+        } else {
+            group.style.display = 'none';
+        }
+    }
+
+    let currentShareId = null;
+    let pollInterval = null;
+    let countdownInterval = null;
+    let timeLeft = 60;
+
+    function submitShare() {
+        const type = document.getElementById('recipientType').value;
+        const id = document.getElementById('recipientId').value;
+
+        if (!type || (type !== '' && !id)) {
+            alert("Please select a recipient and enter their ID.");
+            return;
+        }
+
+        const formData = new FormData(document.querySelector('form'));
+
+        fetch('/create_share', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    currentShareId = data.share_id;
+                    showModal(data.otp_code, null);
+
+                    // Force an immediate check to get the QR
+                    fetchStatus();
+
+                    // Start Countdown Loop
+                    resetCountdown();
+                } else {
+                    alert("Error: " + data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+    }
+
+    function fetchStatus() {
+        if (!currentShareId) return;
+        fetch(`/share_status/${currentShareId}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'active') {
+                    // Update text/image if changed
+                    document.getElementById('otpCode').innerText = data.code;
+                    document.getElementById('qrImage').src = data.qr_image;
+                } else {
+                    console.log("Share expired");
+                    closeModal();
+                }
+            });
+    }
+
+    function resetCountdown() {
+        clearInterval(countdownInterval);
+        timeLeft = 60;
+        updateTimerUI();
+
+        countdownInterval = setInterval(() => {
+            timeLeft--;
+            updateTimerUI();
+
+            if (timeLeft <= 0) {
+                // Timer finished: Fetch new code (Rotation on backend)
+                fetchStatus();
+                timeLeft = 60; // Restart loop
+            }
+        }, 1000);
+    }
+
+    function updateTimerUI() {
+        const text = document.getElementById('countdownText');
+        const path = document.getElementById('countdownPath');
+        if (!text || !path) return;
+
+        text.innerText = timeLeft;
+
+        // Calculate stroke offset
+        // Circumference = 2 * PI * 28 ≈ 176
+        const maxDash = 176;
+        const dashOffset = maxDash - (timeLeft / 60) * maxDash;
+        path.style.strokeDashoffset = dashOffset;
+    }
+
+    function showModal(code, qrImage) {
+        document.getElementById('shareModal').style.display = 'flex';
+        document.getElementById('otpCode').innerText = code;
+        if (qrImage) {
+            document.getElementById('qrImage').src = qrImage;
+        }
+    }
+
+    function closeModal() {
+        document.getElementById('shareModal').style.display = 'none';
+        clearInterval(pollInterval);
+        clearInterval(countdownInterval);
+        currentShareId = null;
+    }
+
 
     // DATA FOR PREVIEWS (Matching allFiles.html)
     const docs = {

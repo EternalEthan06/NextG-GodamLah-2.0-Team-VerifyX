@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+
+{% block title %}Receive Files | VerifyX{% endblock %}
+
+{% block styles %}
+<style>
+    .main-content {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background: #f8fafc;
+        padding: 20px;
+    }
+
+    .receive-card {
+        background: white;
+        padding: 40px;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+        width: 100%;
+        max-width: 480px;
+        /* Slightly wider card */
+        text-align: center;
+    }
+
+    .icon-box {
+        width: 70px;
+        height: 70px;
+        background: var(--gov-blue);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        margin: 0 auto 20px;
+        box-shadow: 0 10px 20px rgba(22, 59, 130, 0.2);
+    }
+
+    h2 {
+        color: var(--gov-blue);
+        margin-bottom: 5px;
+        font-size: 22px;
+    }
+
+    p {
+        color: #64748b;
+        margin-bottom: 25px;
+        font-size: 13px;
+    }
+
+    /* FORM GROUPS */
+    .form-group {
+        text-align: left;
+        margin-bottom: 20px;
+    }
+
+    .label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 5px;
+        display: block;
+        text-transform: uppercase;
+    }
+
+    .input-field {
+        width: 100%;
+        padding: 12px 15px;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        font-size: 15px;
+        outline: none;
+        transition: 0.2s;
+        color: #000;
+        font-weight: 500;
+    }
+
+    .input-field:focus {
+        border-color: var(--gov-blue);
+        box-shadow: 0 0 0 3px rgba(22, 59, 130, 0.1);
+    }
+
+    /* METHOD TABS - PILL DESIGN */
+    .method-tabs {
+        display: flex;
+        background: #f1f5f9;
+        padding: 5px;
+        border-radius: 50px;
+        margin-bottom: 25px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .tab-btn {
+        flex: 1;
+        padding: 12px;
+        border: none;
+        background: transparent;
+        border-radius: 40px;
+        font-weight: 600;
+        font-size: 14px;
+        color: #64748b;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .tab-btn i {
+        font-size: 16px;
+    }
+
+    .tab-btn.active {
+        background: white;
+        color: var(--gov-blue);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        transform: scale(1.02);
+    }
+
+    .tab-btn:hover:not(.active) {
+        color: var(--gov-blue);
+        background: rgba(255, 255, 255, 0.5);
+    }
+
+    /* CODE INPUT */
+    .digit-container {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin: 15px 0;
+    }
+
+    .digit-box {
+        width: 45px;
+        height: 55px;
+        font-size: 20px;
+        font-weight: bold;
+        text-align: center;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        outline: none;
+        transition: 0.2s;
+    }
+
+    .digit-box:focus {
+        border-color: var(--gov-blue);
+        transform: translateY(-2px);
+    }
+
+    /* SUBMIT BUTTON */
+    .btn-submit {
+        width: 100%;
+        padding: 15px;
+        background: var(--gov-blue);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 15px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }
+
+    .btn-submit:hover {
+        background: var(--gov-dark);
+        transform: translateY(-2px);
+    }
+
+    /* QR SCANNER & LASER ANIMATION */
+    .scanner-container {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+    }
+
+    .scanner-wrapper {
+        position: relative;
+        width: 100%;
+        max-width: 320px;
+        /* STRICT WIDTH CONSTRAINT */
+        height: 320px;
+        /* STRICT HEIGHT CONSTRAINT */
+        margin: 0 auto 20px;
+        border-radius: 20px;
+        overflow: hidden;
+        border: 4px solid #e2e8f0;
+        background: #000;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    }
+
+    #reader {
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 16px;
+        overflow: hidden;
+    }
+
+    #reader video {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+        border-radius: 16px !important;
+    }
+
+    /* Hide extra html5 elements */
+    #reader__dashboard_section_csr span,
+    #reader__dashboard_section_swaplink {
+        display: none !important;
+    }
+
+    .scan-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 10;
+        background: radial-gradient(circle, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.6) 90%);
+        border-radius: 16px;
+    }
+
+    .scan-guide-corners {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 200px;
+        height: 200px;
+        border: 2px solid rgba(255, 255, 255, 0.6);
+        border-radius: 20px;
+        box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5);
+        /* Focus effect */
+    }
+
+    .scan-laser {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        background: #3b82f6;
+        box-shadow: 0 0 10px #3b82f6, 0 0 20px #3b82f6;
+        animation: scan 2s infinite ease-in-out;
+        opacity: 0.9;
+        z-index: 11;
+    }
+
+    @keyframes scan {
+        0% {
+            top: 10%;
+            opacity: 0;
+        }
+
+        20% {
+            opacity: 1;
+        }
+
+        80% {
+            opacity: 1;
+        }
+
+        100% {
+            top: 90%;
+            opacity: 0;
+        }
+    }
+</style>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+{% endblock %}
+
+{% block content %}
+<div class="receive-card">
+    <div class="icon-box">
+        <i class="fas fa-box-open"></i>
+    </div>
+
+    <h2>Receive Capsule</h2>
+    <p>Verify sender identity and enter credentials to access files.</p>
+
+    <form id="redeemForm">
+        <!-- STEP 1: SENDER IC -->
+        <div class="form-group">
+            <label class="label">Sender MyKad / ID</label>
+            <input type="text" name="sender_id" class="input-field" placeholder="e.g. 123456-78-1234" required>
+        </div>
+
+        <!-- STEP 2: METHOD SELECTION -->
+        <div class="method-tabs">
+            <button type="button" class="tab-btn active" onclick="switchMethod('code')">
+                <i class="fas fa-keyboard"></i> Enter Code
+            </button>
+            <button type="button" class="tab-btn" onclick="switchMethod('qr')">
+                <i class="fas fa-qrcode"></i> Scan QR
+            </button>
+        </div>
+
+        <!-- OPTION A: ENTER CODE -->
+        <div id="code-section">
+            <label class="label" style="text-align: center;">Enter 6-Digit Share Code</label>
+            <input type="hidden" name="share_code" id="fullCode">
+            <div class="digit-container">
+                <input type="text" class="digit-box" maxlength="1" oninput="handleDigit(this, 0)">
+                <input type="text" class="digit-box" maxlength="1" oninput="handleDigit(this, 1)">
+                <input type="text" class="digit-box" maxlength="1" oninput="handleDigit(this, 2)">
+                <input type="text" class="digit-box" maxlength="1" oninput="handleDigit(this, 3)">
+                <input type="text" class="digit-box" maxlength="1" oninput="handleDigit(this, 4)">
+                <input type="text" class="digit-box" maxlength="1" oninput="handleDigit(this, 5)">
+            </div>
+        </div>
+
+        <!-- OPTION B: QR SCANNER -->
+        <div id="qr-section" style="display:none;">
+            <div class="scanner-container">
+                <div class="scanner-wrapper">
+                    <div id="reader"></div>
+                    <div class="scan-overlay"></div> <!-- Vignette only -->
+                    <div class="scan-guide-corners"></div> <!-- Focus Box -->
+                    <div class="scan-laser"></div> <!-- Laser -->
+                </div>
+            </div>
+
+            <p id="qr-status" style="font-size:11px; color:#aaa; margin-top:5px;">
+                <i class="fas fa-camera"></i> Point camera at the Share QR Code
+            </p>
+        </div>
+
+        <button type="submit" class="btn-submit" id="submitBtn">
+            <i class="fas fa-unlock-alt"></i> Unlock Capsule
+        </button>
+    </form>
+</div>
+
+<script>
+    let html5QrcodeScanner = null;
+    const inputs = document.querySelectorAll('.digit-box');
+    let currentMethod = 'code';
+
+    function switchMethod(method) {
+        currentMethod = method;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+
+        if (method === 'code') {
+            document.querySelector('.tab-btn:first-child').classList.add('active');
+            document.getElementById('code-section').style.display = 'block';
+            document.getElementById('qr-section').style.display = 'none';
+            document.getElementById('submitBtn').style.display = 'flex';
+
+            // Allow camera to stop to save resources, but keep instance if needed? 
+            // Better to stop it to release camera light.
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.clear().catch(err => console.log("Stop failed", err));
+            }
+        } else {
+            document.querySelector('.tab-btn:last-child').classList.add('active');
+            document.getElementById('code-section').style.display = 'none';
+            document.getElementById('qr-section').style.display = 'block';
+            document.getElementById('submitBtn').style.display = 'none'; // Auto-submit on scan
+
+            startScanner();
+        }
+    }
+
+    function startScanner() {
+        if (!html5QrcodeScanner) {
+            html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader", { fps: 10, qrbox: 200, aspectRatio: 1.0, showTorchButtonIfSupported: true });
+        }
+
+        // Slight delay to allow DOM to layout
+        setTimeout(() => {
+            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+        }, 150);
+    }
+
+    function onScanSuccess(decodedText, decodedResult) {
+        console.log(`Scan result: ${decodedText}`);
+        html5QrcodeScanner.clear();
+
+        document.getElementById('fullCode').value = decodedText;
+        submitForm();
+    }
+
+    function onScanFailure(error) {
+        // console.warn(`Code scan error = ${error}`);
+    }
+
+    function handleDigit(el, index) {
+        if (el.value.length === 1 && index < 5) inputs[index + 1].focus();
+    }
+
+    inputs.forEach((input, index) => {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && !input.value && index > 0) inputs[index - 1].focus();
+        });
+    });
+
+    document.getElementById('redeemForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (currentMethod === 'code') {
+            let code = '';
+            inputs.forEach(i => code += i.value);
+            document.getElementById('fullCode').value = code;
+        }
+        submitForm();
+    });
+
+    function submitForm() {
+        const formData = new FormData(document.getElementById('redeemForm'));
+        fetch('/redeem_share', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert(`Success! Documents from ${data.sender_name} (${data.sender_id}) are ready.`);
+                    window.location.href = "/view_capsule_content?sender=" + encodeURIComponent(data.sender_name);
+                } else {
+                    alert("Error: " + data.message);
+                    if (currentMethod === 'qr') switchMethod('code');
+                }
+            });
+    }
+</script>
+{% endblock %}

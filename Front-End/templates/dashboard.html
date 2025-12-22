@@ -24,9 +24,12 @@
     /* GRID LAYOUT */
     .dashboard-grid {
         display: grid;
-        grid-template-columns: 2fr 1fr;
-        /* Left side wider than right */
+        grid-template-columns: 1fr 320px;
+        /* Fixed standard width */
+        /* Fixed standard width */
         gap: 25px;
+        height: calc(100vh - 140px);
+        overflow: hidden;
     }
 
     /* --- DIGITAL ID CARD --- */
@@ -167,23 +170,30 @@
     .access-monitor {
         background: white;
         border-radius: 16px;
-        padding: 20px;
+        padding: 12px;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
         border: 1px solid #e5e7eb;
         height: 100%;
+        max-height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
     }
 
     .monitor-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 20px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #f0f0f0;
+        margin-bottom: 12px;
+        /* Reduce margin */
+        padding-bottom: 0px;
+        border-bottom: none;
+        flex-shrink: 0;
     }
 
     .monitor-header h3 {
-        font-size: 16px;
+        font-size: 14px;
+        font-weight: 700;
         color: var(--gov-dark);
         display: flex;
         align-items: center;
@@ -195,6 +205,7 @@
         height: 8px;
         background-color: var(--success);
         border-radius: 50%;
+        box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15);
         animation: pulse 2s infinite;
     }
 
@@ -214,77 +225,142 @@
 
     .log-list {
         list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        /* Ultra compact gap */
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        margin-bottom: 8px;
+    }
+
+    .view-all-btn {
+        flex-shrink: 0;
+        margin-top: auto;
     }
 
     .log-item {
         display: flex;
-        gap: 12px;
-        margin-bottom: 15px;
+        flex-direction: column;
         align-items: flex-start;
+        gap: 6px;
+        /* Tighter internal gap */
+        padding: 10px;
+        /* Reduced padding */
+        border-radius: 12px;
+        background-color: #f8fafc;
+        border: 1px solid transparent;
+        flex-shrink: 1;
+        /* Allow shrinking */
+        min-height: 0;
+    }
+
+    /* Hover effect removed */
+
+    .log-row-top {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: space-between;
     }
 
     .log-icon {
         width: 32px;
         height: 32px;
         border-radius: 8px;
-        background-color: #f3f4f6;
+        background-color: transparent;
+        /* Transparent background */
+        /* Border removed */
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 12px;
+        font-size: 14px;
         color: var(--text-light);
         flex-shrink: 0;
     }
 
+    /* Hover effect for icon removed */
+
+    .log-details {
+        width: 100%;
+        min-width: 0;
+    }
+
     .log-details h4 {
         font-size: 13px;
+        font-weight: 600;
         margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--gov-dark);
     }
 
     .log-details p {
         font-size: 11px;
-        color: var(--text-light);
+        color: #8899a6;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .log-status {
         font-size: 10px;
-        font-weight: 700;
-        margin-left: auto;
-        padding: 2px 6px;
-        border-radius: 4px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        padding: 4px 10px;
+        border-radius: 20px;
+        flex-shrink: 0;
     }
 
     .status-active {
-        color: var(--success);
-        background: #ecfdf5;
+        color: #059669;
+        background: #d1fae5;
     }
 
     .status-revoked {
-        color: var(--danger);
-        background: #fef2f2;
+        color: #dc2626;
+        background: #fee2e2;
+    }
+
+    .status-success {
+        color: #059669;
+        background: #d1fae5;
+    }
+
+    .status-failed {
+        color: #dc2626;
+        background: #fee2e2;
     }
 
     .status-pending {
-        color: var(--warning);
-        background: #fffbeb;
+        color: #d97706;
+        background: #fef3c7;
     }
 
     .view-all-btn {
         display: block;
         width: 100%;
         text-align: center;
-        margin-top: 15px;
-        padding: 10px;
-        font-size: 12px;
-        color: var(--gov-blue);
+        margin-top: 24px;
+        padding: 14px;
+        font-size: 13px;
+        color: var(--gov-dark);
         text-decoration: none;
-        background: #f8fafc;
-        border-radius: 8px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
         font-weight: 600;
+        transition: all 0.2s;
     }
 
     .view-all-btn:hover {
-        background: #eef5fc;
+        background: #f8fafc;
+        border-color: var(--gov-blue);
+        color: var(--gov-blue);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
     }
 
     /* ALERT BAR */
@@ -352,21 +428,43 @@
                 <div class="action-icon">
                     <i class="fas fa-folder-open"></i>
                 </div>
-                <h4>My Documents</h4>
+                <h4>My Files</h4>
             </a>
 
             <a href="{{ url_for('share') }}" class="action-card">
                 <div class="action-icon">
                     <i class="fas fa-share-square"></i>
                 </div>
-                <h4>Share Data</h4>
+                <h4>Share Capsule</h4>
+            </a>
+
+            <a href="{{ url_for('receive_capsule') }}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-box-open"></i>
+                </div>
+                <h4>Receive Capsule</h4>
+            </a>
+
+            <a href="{{ url_for('access_log') }}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-history"></i>
+                </div>
+                <h4>Access Logs</h4>
             </a>
 
             <a href="{{ url_for('settings') }}" class="action-card">
                 <div class="action-icon">
                     <i class="fas fa-user-cog"></i>
                 </div>
-                <h4>Profile</h4>
+                <h4>Settings</h4>
+            </a>
+
+            <a href="{{ url_for('logout') }}" class="action-card" style="border-color: #fca5a5;"
+                onclick="confirmLogout(event)">
+                <div class="action-icon" style="background-color: #fef2f2; color: #ef4444;">
+                    <i class="fas fa-sign-out-alt"></i>
+                </div>
+                <h4 style="color: #ef4444;">Logout</h4>
             </a>
         </div>
     </div>
@@ -380,29 +478,31 @@
             </div>
 
             <ul class="log-list">
-                {% for log in logs %}
+                {% for log in logs[:4] %}
                 <li class="log-item">
-                    <div class="log-icon">
-                        {% if log.action == 'SHARE' %}
-                        <i class="fas fa-share"></i>
-                        {% elif log.action == 'LOGIN' %}
-                        <i class="fas fa-sign-in-alt"></i>
-                        {% elif log.action == 'VERIFY' %}
-                        <i class="fas fa-fingerprint"></i>
-                        {% else %}
-                        <i class="fas fa-circle"></i>
-                        {% endif %}
+                    <div class="log-row-top">
+                        <div class="log-icon">
+                            {% if log.action == 'SHARE' %}
+                            <i class="fas fa-share"></i>
+                            {% elif log.action == 'LOGIN' %}
+                            <i class="fas fa-sign-in-alt"></i>
+                            {% elif log.action == 'VERIFY' %}
+                            <i class="fas fa-fingerprint"></i>
+                            {% else %}
+                            <i class="fas fa-circle"></i>
+                            {% endif %}
+                        </div>
+                        <span class="log-status 
+                                {% if log.status == 'ACTIVE' or log.status == 'SUCCESS' %}status-active
+                                {% elif log.status == 'REVOKED' or log.status == 'FAILED' %}status-revoked
+                                {% else %}status-pending{% endif %}">
+                            {{ log.status }}
+                        </span>
                     </div>
                     <div class="log-details">
                         <h4>{{ log.organization_name }}</h4>
                         <p>{{ log.context }} • {{ log.timestamp }}</p>
                     </div>
-                    <span class="log-status 
-                            {% if log.status == 'ACTIVE' or log.status == 'SUCCESS' %}status-active
-                            {% elif log.status == 'REVOKED' or log.status == 'FAILED' %}status-revoked
-                            {% else %}status-pending{% endif %}">
-                        {{ log.status }}
-                    </span>
                 </li>
                 {% else %}
                 <li class="log-item" style="justify-content: center; color: #999; font-size: 12px;">

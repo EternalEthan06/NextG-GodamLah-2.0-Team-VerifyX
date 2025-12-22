@@ -1,34 +1,112 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Verify Identity | SLP-ID</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; max-width: 500px; width: 100%; }
-        h2 { color: #003366; margin-bottom: 10px; }
-        p { color: #666; margin-bottom: 30px; }
-        
-        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; }
-        
-        .bio-option { 
-            border: 2px solid #eee; border-radius: 10px; padding: 20px; cursor: pointer; transition: all 0.2s; position: relative;
+        body {
+            background-color: #f0f2f5;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
         }
-        .bio-option:hover { border-color: #93c5fd; background: #f8fafc; }
-        .bio-option.selected { border-color: #003366; background: #eef5fc; box-shadow: 0 0 0 2px rgba(0, 51, 102, 0.2); }
-        .bio-option i { font-size: 30px; color: #003366; margin-bottom: 10px; display: block; }
-        .bio-option span { font-weight: 600; color: #333; }
-        
-        .disabled-opt { opacity: 0.5; cursor: not-allowed; background: #eee; }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h2 {
+            color: #003366;
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .bio-option {
+            border: 2px solid #eee;
+            border-radius: 10px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 120px;
+            /* Fixed height for uniformity */
+        }
+
+        .bio-option:hover {
+            border-color: #93c5fd;
+            background: #f8fafc;
+        }
+
+        .bio-option.selected {
+            border-color: #003366;
+            background: #eef5fc;
+            box-shadow: 0 0 0 2px rgba(0, 51, 102, 0.2);
+        }
+
+        .bio-option i {
+            font-size: 30px;
+            color: #003366;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .bio-option span {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .disabled-opt {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: #eee;
+        }
 
         .btn-submit {
-            background: #003366; color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer;
+            background: #003366;
+            color: white;
+            border: none;
+            padding: 15px;
+            width: 100%;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
         }
-        .btn-submit:disabled { background: #ccc; cursor: not-allowed; }
+
+        .btn-submit:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h2>Security Verification</h2>
@@ -38,7 +116,7 @@
             <div class="options-grid">
                 <div class="bio-option" onclick="toggle(this)">
                     <input type="checkbox" name="methods" value="face" hidden>
-                    <i class="fas fa-face-viewfinder"></i>
+                    <i class="fas fa-user"></i>
                     <span>Face Scan</span>
                 </div>
                 <div class="bio-option" onclick="toggle(this)">
@@ -85,4 +163,5 @@
         }
     </script>
 </body>
+
 </html>
