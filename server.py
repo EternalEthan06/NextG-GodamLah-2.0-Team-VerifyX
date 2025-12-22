@@ -1,5 +1,6 @@
 import sqlite3 
 import datetime 
+import time 
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session, send_from_directory, send_file
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash # Keep generate_password_hash for the mock/temp fix
@@ -11,6 +12,11 @@ import numpy as np
 import librosa
 from resemblyzer import VoiceEncoder, preprocess_wav
 from difflib import SequenceMatcher
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+from PIL import Image
+import pickle
 
 # Initialize Flask
 app = Flask(__name__, template_folder='Front-End/templates')
@@ -340,6 +346,140 @@ def handle_login():
     # Unknown user
     register_failure(None, "Unknown User")
     return jsonify({'status': 'failure', 'message': 'Invalid MyKad or Password.'}), 401
+
+@app.route('/verify-face', methods=['POST'])
+def verify_face():
+    """
+    Receives an image (from webcam), extracts the MediaPipe Face Vector,
+    and compares it against the enrolled vector in the database.
+    """
+    # 1. TIMEOUT CHECK
+    if check_timeout():
+        return jsonify({'status': 'failure', 'message': 'TIMEOUT: Verification took too long.', 'redirect': url_for('login', alert='timeout')})
+    
+    mykad = session.get('user_mykad')
+    if not mykad:
+        return jsonify({'status': 'failure', 'message': 'Session expired.'}), 401
+    
+    # 2. FILE CHECK
+    if 'image' not in request.files:
+        return jsonify({'status': 'failure', 'message': 'No image provided.'}), 400
+        
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({'status': 'failure', 'message': 'No selected file.'}), 400
+
+    try:
+        # 3. Read Bytes directly
+        image_blob = file.read()
+        file.seek(0) # Reset pointer
+        
+        # 4. Extract Geometry Vector (MediaPipe)
+        face_vector = get_face_vector(image_blob)
+        
+        if face_vector is None:
+             return jsonify({'status': 'failure', 'message': 'No face detected. Please ensure good lighting.'})
+             
+        # 5. Serialize Vector
+        new_encoding_blob = pickle.dumps(face_vector)
+
+        # 6. ENROLLMENT (First time)
+        if not session.get('is_enrolled') and session.get('enrollment_stage') == 'face':
+            conn = get_db_connection()
+            # Store BOTH the image and the encoding
+            conn.execute('UPDATE citizens SET face_image_blob = ?, face_encoding_blob = ? WHERE mykad_number = ?', 
+                         (image_blob, new_encoding_blob, mykad))
+            conn.commit()
+            conn.close()
+            
+            log_action(mykad, "ENROLL", "Face Biometric Registered (MP)", "System", "SUCCESS")
+            return jsonify({'status': 'success', 'message': 'Face registered successfully.'})
+
+        # 7. VERIFICATION (Returning)
+        else:
+            conn = get_db_connection()
+            # Fetch stored encoding from citizens table
+            user_record = conn.execute('SELECT face_encoding_blob FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
+            
+            if not user_record or not user_record['face_encoding_blob']:
+                conn.close()
+                return jsonify({'status': 'failure', 'message': 'No face enrolled. Please enroll first.'})
+
+            stored_vector = pickle.loads(user_record['face_encoding_blob'])
+            
+            # Compare
+            distance = compare_vectors(stored_vector, face_vector)
+            print(f"DEBUG: Face Distance = {distance:.4f}")
+            
+            # Threshold: < 3.5 roughly match for same person/pose
+            if distance < 3.5:
+                conn.close()
+                log_action(mykad, "VERIFY", "Face Match Success", "System", "SUCCESS")
+                return jsonify({'status': 'success', 'message': 'Face verified successfully.'})
+            else:
+                conn.close()
+                #print(f"DEBUG: Mismatch. Dist={distance}")
+                log_action(mykad, "VERIFY", "Face Mismatch", "System", "FAILED")
+                return jsonify({'status': 'failure', 'message': 'Face verification failed. Please try again.'})
+
+    except Exception as e:
+        print(f"Face Error: {e}")
+        return jsonify({'status': 'failure', 'message': 'Error processing face biometrics.'}), 500
+
+@app.route('/verify-gesture-identity', methods=['POST'])
+def verify_gesture_identity():
+    """
+    Called during the Gesture Step to re-verify that the person performing
+    the gesture is indeed the enrolled user.
+    """
+    if check_timeout():
+        return jsonify({'status': 'failure', 'message': 'TIMEOUT.', 'redirect': url_for('login', alert='timeout')})
+        
+    mykad = session.get('user_mykad')
+    
+    if 'image' not in request.files:
+        return jsonify({'status': 'failure', 'message': 'No image.'}), 400
+        
+    file = request.files['image']
+    
+    try:
+        # 1. Read Bytes directly
+        image_blob = file.read()
+        
+        # 2. Extract Vector (MediaPipe)
+        new_vector = get_face_vector(image_blob)
+        
+        if new_vector is None:
+             return jsonify({'status': 'failure', 'message': 'No face detected. Please show your face.'})
+        
+        # 3. IDENTITY VERIFICATION (Compare with DB)
+        conn = get_db_connection()
+        user_record = conn.execute('SELECT face_encoding_blob FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
+        conn.close()
+
+        if not user_record or not user_record['face_encoding_blob']:
+             return jsonify({'status': 'failure', 'message': 'No enrolled face data found.'})
+
+        stored_vector = pickle.loads(user_record['face_encoding_blob'])
+        
+        # Compare
+        distance = compare_vectors(stored_vector, new_vector)
+        print(f"DEBUG: Gesture Face Dist = {distance:.4f}")
+        
+        # Threshold similar to verify_face
+        if distance > 4.0: # Slightly looser for gestures
+             log_action(mykad, "GESTURE_VERIFY", f"Face Mismatch (Dist={distance:.2f})", "System", "FAILED")
+             return jsonify({'status': 'failure', 'message': 'Identity verification failed. Face does not match.'})
+
+        # 4. Identity Confirmed
+        print(f"DEBUG: Gesture Identity Verified. Dist={distance:.2f}")
+        log_action(mykad, "GESTURE_VERIFY", f"Identity Confirmed", "System", "SUCCESS")
+        
+        return jsonify({'status': 'success', 'message': 'Identity confirmed.', 'blink_info': "Pass"})
+
+    except Exception as e:
+        print(f"Gesture Identity Error: {e}")
+        return jsonify({'status': 'failure', 'message': 'Processing error.'}), 500
 
 @app.route('/verify-voice', methods=['POST'])
 def verify_voice():
