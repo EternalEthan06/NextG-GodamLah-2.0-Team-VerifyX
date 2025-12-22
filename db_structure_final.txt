@@ -1,0 +1,2 @@
+Columns in citizens table:
+['id', 'full_name', 'mykad_number', 'address', 'income_bracket', 'oku_status', 'digital_signature', 'password_hash', 'birth_cert_enc', 'water_bill_enc', 'oku_status_enc', 'voice_audio_blob', 'failed_attempts', 'lockout_until', 'face_image_blob', 'face_encoding_blob']

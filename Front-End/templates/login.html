@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -31,7 +32,7 @@
             max-width: 900px;
             background: white;
             border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
             display: flex;
             overflow: hidden;
             height: 550px;
@@ -49,12 +50,34 @@
             position: relative;
         }
 
-        .login-visual h2 { font-size: 32px; margin-bottom: 20px; line-height: 1.2; }
-        .login-visual p { opacity: 0.8; font-size: 16px; line-height: 1.6; margin-bottom: 40px; }
-        
-        .feature-list { list-style: none; padding: 0; }
-        .feature-list li { margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
-        .feature-list i { color: #4ade80; }
+        .login-visual h2 {
+            font-size: 32px;
+            margin-bottom: 20px;
+            line-height: 1.2;
+        }
+
+        .login-visual p {
+            opacity: 0.8;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 40px;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .feature-list i {
+            color: #4ade80;
+        }
 
         /* --- RIGHT SIDE (Form) --- */
         .login-form-area {
@@ -65,28 +88,38 @@
             justify-content: center;
         }
 
-        .logo { 
-            color: var(--gov-blue); 
-            font-weight: 800; 
-            font-size: 24px; 
-            margin-bottom: 40px; 
-            display: flex; 
-            align-items: center; 
-            gap: 10px; 
+        .logo {
+            color: var(--gov-blue);
+            font-weight: 800;
+            font-size: 24px;
+            margin-bottom: 40px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-color); font-size: 14px; }
-        
-        input { 
-            width: 100%; 
-            padding: 12px; 
-            border: 1px solid #ccc; 
-            border-radius: 6px; 
-            margin-bottom: 20px; 
-            font-size: 16px; 
-            transition: border 0.2s; 
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 14px;
         }
-        input:focus { border-color: var(--gov-blue); outline: none; }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 16px;
+            transition: border 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--gov-blue);
+            outline: none;
+        }
 
         .btn-primary {
             background-color: var(--gov-blue);
@@ -100,8 +133,11 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        .btn-primary:hover { background-color: var(--gov-dark); }
-        
+
+        .btn-primary:hover {
+            background-color: var(--gov-dark);
+        }
+
         .system-notice {
             margin-top: 30px;
             padding: 15px;
@@ -114,18 +150,31 @@
 
         /* Mobile Responsive */
         @media (max-width: 768px) {
-            .login-container { flex-direction: column; height: auto; max-width: 100%; border-radius: 0; }
-            .login-visual { display: none; }
-            .login-form-area { padding: 30px; }
+            .login-container {
+                flex-direction: column;
+                height: auto;
+                max-width: 100%;
+                border-radius: 0;
+            }
+
+            .login-visual {
+                display: none;
+            }
+
+            .login-form-area {
+                padding: 30px;
+            }
         }
     </style>
 </head>
+
 <body>
 
     <div class="login-container">
         <div class="login-visual">
             <h2>Smart Life Profile ID</h2>
-            <p>One Secure Identity. Infinite Possibilities.<br>Access government services, verify rentals, and prevent fraud with your digital profile.</p>
+            <p>One Secure Identity. Infinite Possibilities.<br>Access government services, verify rentals, and prevent
+                fraud with your digital profile.</p>
             <ul class="feature-list">
                 <li><i class="fas fa-shield-alt"></i> Anti-Fake Profile Technology</li>
                 <li><i class="fas fa-lock"></i> Permission-Based Sharing (P2V)</li>
@@ -139,19 +188,32 @@
         <div class="login-form-area">
             <div class="logo"><i class="fas fa-id-card"></i> SLP-ID Portal</div>
 
+            {% if alert == 'timeout' %}
+            <div
+                style="background-color: #fef2f2; border: 1px solid #ef4444; color: #b91c1c; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; display: flex; align-items: center; gap: 10px;">
+                <i class="fas fa-clock"></i>
+                <div>
+                    <strong>Session Time Out</strong><br>
+                    You exceeded the time limit for verification. Please try again.
+                </div>
+            </div>
+            {% endif %}
+
             <form onsubmit="handleLogin(event)">
                 <label for="ic-number">MyKad / ID Number</label>
-                <input type="text" id="ic-number" name="ic-number" placeholder="ID number" required>
+                <input type="text" id="ic-number" name="ic-number" placeholder="ID number" required autocomplete="on">
 
                 <label for="password">System Password</label>
-                <input type="password" id="password" name="password" placeholder="Password" required>
+                <input type="password" id="password" name="password" placeholder="Password" required
+                    autocomplete="new-password">
 
                 <button type="submit" class="btn-primary">Secure Login</button>
             </form>
 
             <div class="system-notice">
                 <strong>Restricted Access System:</strong><br>
-                This portal is for Malaysian citizens only. Registration is handled at Malaysia National Registration Department (JPN) branch.
+                This portal is for Malaysian citizens only. Registration is handled at Malaysia National Registration
+                Department (JPN) branch.
             </div>
         </div>
     </div>
@@ -160,7 +222,7 @@
         // --- 1. HANDLE LOGIN SUBMISSION (AJAX) ---
         function handleLogin(event) {
             event.preventDefault(); // Stop page reload
-            
+
             const mykad = document.getElementById('ic-number').value;
             const password = document.getElementById('password').value;
             const btn = document.querySelector('.btn-primary');
@@ -171,56 +233,57 @@
             btn.disabled = true;
 
             // FINAL AJAX CALL to the Flask route
-            fetch('/handle_login', { 
+            fetch('/handle_login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ 
-                    'ic-number': mykad, 
-                    'password': password 
+                body: JSON.stringify({
+                    'ic-number': mykad,
+                    'password': password
                 })
             })
-            .then(response => {
-                if (!response.ok) {
-                    // Read the error message from the Flask response and throw it
-                    return response.json().then(err => { throw new Error(err.message || 'Login failed.'); });
-                }
-                return response.json();
-            })
-            .then(data => {
-                // Success: Redirect to dashboard
-                window.location.href = data.redirect;
-            })
-            .catch(error => {
-                // Failure: Display alert and reset button
-                alert(`Login Failed: ${error.message}`);
-                console.error('Login error:', error);
-                btn.innerText = "Secure Login";
-                btn.style.opacity = "1";
-                btn.disabled = false;
-            });
+                .then(response => {
+                    if (!response.ok) {
+                        // Read the error message from the Flask response and throw it
+                        return response.json().then(err => { throw new Error(err.message || 'Login failed.'); });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Success: Redirect to dashboard
+                    window.location.href = data.redirect;
+                })
+                .catch(error => {
+                    // Failure: Display alert and reset button
+                    alert(`Login Failed: ${error.message}`);
+                    console.error('Login error:', error);
+                    btn.innerText = "Secure Login";
+                    btn.style.opacity = "1";
+                    btn.disabled = false;
+                });
         }
 
         // --- 2. PAGE RESET LOGIC (Clears inputs on back button use) ---
-        window.onpageshow = function(event) {
-            
+        window.onpageshow = function (event) {
+
             // Reset the Button
             const btn = document.querySelector('.btn-primary');
             if (btn) {
-                btn.innerText = "Secure Login"; 
-                btn.style.opacity = "1";        
-                btn.disabled = false;           
+                btn.innerText = "Secure Login";
+                btn.style.opacity = "1";
+                btn.disabled = false;
             }
 
             // Wipe the Input Fields
             const icInput = document.getElementById('ic-number');
             const passInput = document.getElementById('password');
-            
+
             if (icInput) icInput.value = "";
             if (passInput) passInput.value = "";
         };
     </script>
 
 </body>
+
 </html>

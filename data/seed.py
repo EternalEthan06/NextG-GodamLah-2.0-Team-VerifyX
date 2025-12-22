@@ -39,7 +39,11 @@ def create_database():
             birth_cert_enc TEXT,
             water_bill_enc TEXT,
             oku_status_enc TEXT,
-            voice_audio_blob BLOB
+            voice_audio_blob BLOB,
+            face_image_blob BLOB,
+            face_encoding_blob BLOB,
+            failed_attempts INTEGER DEFAULT 0,
+            lockout_until DATETIME DEFAULT NULL
         )
     ''')
 
@@ -55,9 +59,7 @@ def create_database():
             status TEXT
         )
     ''')
-    
-    print("Database tables created.")
-    
+        
     # ---------------------------------------------------------
     # SEED DATA GENERATION
     # ---------------------------------------------------------
@@ -79,6 +81,8 @@ def create_database():
         MOCK_ENCRYPTER.encrypt_cell(f"BC-{known_mykad} | Demo User"),
         MOCK_ENCRYPTER.encrypt_cell(f"ACCT-B5521-RM150 | Paid"),
         MOCK_ENCRYPTER.encrypt_cell("Active"),
+        None,
+        None,
         None
     ))
 
@@ -96,6 +100,8 @@ def create_database():
         MOCK_ENCRYPTER.encrypt_cell(f"BC-{ethan_mykad} | Ethan"),
         MOCK_ENCRYPTER.encrypt_cell(f"water_bill_ethan"),
         MOCK_ENCRYPTER.encrypt_cell("Active"),
+        None,
+        None,
         None
     ))
 
@@ -112,6 +118,8 @@ def create_database():
         MOCK_ENCRYPTER.encrypt_cell(f"BC-{chloe_mykad} | Chloe"),
         MOCK_ENCRYPTER.encrypt_cell(f"water_bill_chloe"),
         MOCK_ENCRYPTER.encrypt_cell("Inactive"),
+        None,
+        None,
         None
     ))
 
@@ -138,14 +146,14 @@ def create_database():
         water_bill_data = MOCK_ENCRYPTER.encrypt_cell(f"ACCT-B{mykad[-4:]}-RM150 | Status: Paid")
         oku_data = MOCK_ENCRYPTER.encrypt_cell(oku)
 
-        citizens_data_for_db.append((name, mykad, address, income, oku, signature, password_storage_hash, birth_cert_data, water_bill_data, oku_data, None))
+        citizens_data_for_db.append((name, mykad, address, income, oku, signature, password_storage_hash, birth_cert_data, water_bill_data, oku_data, None, None, None))
 
 
     # Insert citizen data
     cursor.executemany('''
         INSERT INTO citizens (full_name, mykad_number, address, income_bracket, oku_status, digital_signature, 
-                              password_hash, birth_cert_enc, water_bill_enc, oku_status_enc, voice_audio_blob)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              password_hash, birth_cert_enc, water_bill_enc, oku_status_enc, voice_audio_blob, face_image_blob, face_encoding_blob)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', citizens_data_for_db)
     
     # 5. Insert Mock Access Log Data (Populates the new access_logs table)
@@ -185,7 +193,7 @@ def create_database():
     print("✅ DATABASE READY: 'verifyx.db' populated securely.")
     print("✅ access_logs table created and populated with mock data.")
     print("==================================================")
-    print(f"🚨 DEMO USER CREDENTIALS (FOR TESTING ONLY): MYKAD: {known_mykad}, PASSWORD: {known_password}")
+    print(f"🚨 JASMIN CREDENTIALS: MYKAD: {known_mykad}, PASSWORD: {known_password}")
     print(f"🚨 ETHAN CREDENTIALS: MYKAD: {ethan_mykad}, PASSWORD: password123")
     print(f"🚨 CHLOE CREDENTIALS: MYKAD: {chloe_mykad}, PASSWORD: password123")
     

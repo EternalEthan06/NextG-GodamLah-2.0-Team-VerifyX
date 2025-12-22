@@ -284,6 +284,80 @@
     <!-- Scripts Block -->
     {% block scripts %}{% endblock %}
 
+    <!-- INACTIVITY WARNING MODAL -->
+    <div id="timeout-modal"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; align-items: center; justify-content: center;">
+        <div
+            style="background: white; padding: 30px; border-radius: 12px; width: 400px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <div
+                style="width: 60px; height: 60px; background: #fff7ed; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
+                <i class="fas fa-history" style="font-size: 30px; color: #f59e0b;"></i>
+            </div>
+            <h2 style="color: #1f2937; margin-bottom: 10px; font-size: 20px;">Are you still there?</h2>
+            <p style="color: #6b7280; margin-bottom: 25px; line-height: 1.5;">
+                For security, your session will expire in <span id="timeout-countdown"
+                    style="color: #ef4444; font-weight: bold;">30</span> seconds due to inactivity.
+            </p>
+            <button onclick="stayLoggedIn()"
+                style="background: #003366; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: background 0.2s;">
+                I'm Still Here
+            </button>
+        </div>
+    </div>
+
+    <!-- INACTIVITY MONITOR SCRIPT -->
+    <script>
+        let warningTimer, logoutTimer;
+        // 5 Minutes = 300,000 ms
+        // Warning at 4m 30s = 270,000 ms
+        const WARNING_TIME = 270000;
+        const LOGOUT_TIME = 300000;
+
+        function resetTimers() {
+            clearTimeout(warningTimer);
+            clearTimeout(logoutTimer);
+
+            document.getElementById('timeout-modal').style.display = 'none';
+
+            warningTimer = setTimeout(showWarning, WARNING_TIME);
+            logoutTimer = setTimeout(forceLogout, LOGOUT_TIME);
+        }
+
+        function showWarning() {
+            const modal = document.getElementById('timeout-modal');
+            modal.style.display = 'flex';
+
+            // Start Countdown UI
+            let seconds = 30;
+            const counter = document.getElementById('timeout-countdown');
+            counter.innerText = seconds;
+
+            const interval = setInterval(() => {
+                seconds--;
+                counter.innerText = seconds;
+                if (seconds <= 0) clearInterval(interval);
+            }, 1000);
+        }
+
+        function forceLogout() {
+            window.location.href = "{{ url_for('logout') }}";
+        }
+
+        function stayLoggedIn() {
+            // Ping server to keep session alive?
+            // Actually, just making a request works.
+            fetch(window.location.href);
+            resetTimers();
+        }
+
+        // Event Listeners for Activity
+        window.onload = resetTimers;
+        document.onmousemove = resetTimers;
+        document.onkeypress = resetTimers;
+        document.onclick = resetTimers;
+        document.onscroll = resetTimers;
+    </script>
+
 </body>
 
 </html>
