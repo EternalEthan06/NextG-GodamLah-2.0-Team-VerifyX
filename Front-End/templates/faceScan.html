@@ -257,6 +257,7 @@
         <div class="status-msg" id="statusMsg"></div>
     </div>
 
+<<<<<<< HEAD
     <script type="module">
         import {
             FaceLandmarker,
@@ -307,6 +308,16 @@
         initFaceLandmarker();
 
         window.initCameraAndScan = async function initCameraAndScan() {
+=======
+    <script>
+        let stream = null;
+        let isLivenessCheckActive = false;
+        let isHeadTurnCheckActive = false;
+        let livenessTimeout = null;
+        let challengeDirection = 'left'; // Define the challenge
+
+        async function initCameraAndScan() {
+>>>>>>> 9837a2c15bc68b21201d7591d2e26c69c716fe43
             const btn = document.getElementById('startBtn');
             const status = document.getElementById('statusMsg');
             const video = document.getElementById('webcam');
@@ -323,7 +334,11 @@
             status.innerText = "Requesting optical sensor access...";
 
             try {
+<<<<<<< HEAD
                 // 2. Request Camera
+=======
+                // 2. Request Camera Permission
+>>>>>>> 9837a2c15bc68b21201d7591d2e26c69c716fe43
                 stream = await navigator.mediaDevices.getUserMedia({
                     video: {
                         facingMode: 'user',
@@ -332,6 +347,7 @@
                     }
                 });
                 video.srcObject = stream;
+<<<<<<< HEAD
                 video.style.display = "block";
 
                 video.addEventListener("loadeddata", predictWebcam);
@@ -341,6 +357,14 @@
 
                 // 3. Start Liveness Sequence
                 setTimeout(startLivenessSequence, 1500);
+=======
+                video.style.display = "block"; // Show the video element
+
+                status.innerText = "Camera Active. Align face.";
+
+                // 3. Start Liveness Check Steps
+                setTimeout(startLivenessCheck, 1500);
+>>>>>>> 9837a2c15bc68b21201d7591d2e26c69c716fe43
 
             } catch (err) {
                 console.error("Camera Error:", err);
@@ -351,7 +375,11 @@
             }
         }
 
+<<<<<<< HEAD
         function startLivenessSequence() {
+=======
+        async function startLivenessCheck() {
+>>>>>>> 9837a2c15bc68b21201d7591d2e26c69c716fe43
             const status = document.getElementById('statusMsg');
             const laser = document.getElementById('scanLaser');
 
@@ -359,6 +387,7 @@
             status.innerHTML = "LIVENESS 1/2: Please <b style='color: #0ea5e9;'>BLINK</b> naturally.";
             status.style.color = "white";
             laser.style.display = 'block';
+<<<<<<< HEAD
             livenessStep = "BLINK";
             isBlinkVerified = false;
         }
@@ -475,16 +504,125 @@
         }
 
         window.performFaceVerification = async function performFaceVerification() {
+=======
+
+            isLivenessCheckActive = true;
+            checkBlinkLoop();
+
+            // Global Timeout (20s total for all steps)
+            livenessTimeout = setTimeout(() => {
+                if (isLivenessCheckActive || isHeadTurnCheckActive) {
+                    stopScan();
+                    status.innerText = "Liveness Check Failed: Timeout.";
+                    status.style.color = "#ef4444";
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('startBtn').innerHTML = '<i class="fas fa-redo"></i> Retry Scan';
+                }
+            }, 25000);
+        }
+
+        async function checkBlinkLoop() {
+            if (!isLivenessCheckActive) return;
+
+            const blob = await captureFrame(0.7);
+            if (!blob) return;
+
+            const formData = new FormData();
+            formData.append('image', blob, 'frame.jpg');
+
+            try {
+                const response = await fetch('/check-blink', { method: 'POST', body: formData });
+                const result = await response.json();
+
+                if (result.blink) {
+                    // BLINK SUCCESS -> NEXT STEP
+                    isLivenessCheckActive = false;
+
+                    document.getElementById('statusMsg').innerText = "Blink Verified! Preparing next step...";
+                    document.getElementById('statusMsg').style.color = "#10b981";
+
+                    setTimeout(startHeadTurnCheck, 1000);
+
+                } else {
+                    if (isLivenessCheckActive) setTimeout(checkBlinkLoop, 300);
+                }
+
+            } catch (e) {
+                if (isLivenessCheckActive) setTimeout(checkBlinkLoop, 500);
+            }
+        }
+
+        async function startHeadTurnCheck() {
+            const status = document.getElementById('statusMsg');
+            // STEP 2: HEAD TURN
+            status.innerHTML = `LIVENESS 2/2: Turn Head to the <b style='color: #0ea5e9;'>SIDE</b> to verify.`;
+            status.style.color = "white";
+
+            isHeadTurnCheckActive = true;
+            checkHeadTurnLoop();
+        }
+
+        async function checkHeadTurnLoop() {
+            if (!isHeadTurnCheckActive) return;
+
+            const blob = await captureFrame(0.5); // Fast capture
+            if (!blob) return;
+
+            const formData = new FormData();
+            formData.append('image', blob, 'frame.jpg');
+
+            try {
+                const response = await fetch('/check-pose', { method: 'POST', body: formData });
+                const result = await response.json();
+
+                // Accept EITHER left or right turn
+                if (result.direction === 'left' || result.direction === 'right') {
+                    // TURN SUCCESS
+                    isHeadTurnCheckActive = false;
+                    clearTimeout(livenessTimeout);
+
+                    document.getElementById('statusMsg').innerText = "Pose Verified! Look at camera...";
+                    document.getElementById('statusMsg').style.color = "#10b981";
+
+                    // Wait for user to look back
+                    setTimeout(performFaceVerification, 2000);
+                } else {
+                    if (isHeadTurnCheckActive) setTimeout(checkHeadTurnLoop, 300);
+                }
+            } catch (e) {
+                if (isHeadTurnCheckActive) setTimeout(checkHeadTurnLoop, 500);
+            }
+        }
+
+        async function captureFrame(quality) {
+            const video = document.getElementById('webcam');
+            const canvas = document.createElement('canvas');
+            canvas.width = 320;
+            canvas.height = 240;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+        }
+
+        async function performFaceVerification() {
+>>>>>>> 9837a2c15bc68b21201d7591d2e26c69c716fe43
             const btn = document.getElementById('startBtn');
             const laser = document.getElementById('scanLaser');
             const status = document.getElementById('statusMsg');
             const container = document.querySelector('.security-container');
             const video = document.getElementById('webcam');
 
+<<<<<<< HEAD
             status.innerText = "Analyzing Biometric Data...";
             status.style.color = "#0ea5e9";
 
             // Capture image for Backend Verification
+=======
+            status.innerText = "Analyzing Texture & Biometric Depth...";
+            status.style.color = "#0ea5e9";
+
+            // Capture High Res
+>>>>>>> 9837a2c15bc68b21201d7591d2e26c69c716fe43
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
@@ -492,13 +630,24 @@
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             canvas.toBlob(async (blob) => {
+<<<<<<< HEAD
                 if (!blob) return;
+=======
+                if (!blob) {
+                    status.innerText = "Capture failed.";
+                    stopScan();
+                    return;
+                }
+>>>>>>> 9837a2c15bc68b21201d7591d2e26c69c716fe43
 
                 const formData = new FormData();
                 formData.append('image', blob, 'face_scan.jpg');
 
                 try {
+<<<<<<< HEAD
                     // Send to Backend for REAL Verification
+=======
+>>>>>>> 9837a2c15bc68b21201d7591d2e26c69c716fe43
                     const response = await fetch('/verify-face', { method: 'POST', body: formData });
                     const result = await response.json();
 
@@ -515,15 +664,32 @@
                         // FAIL
                         status.innerText = "Verification Failed: " + result.message;
                         status.style.color = "#ef4444";
+<<<<<<< HEAD
+=======
+                        stopScan();
+>>>>>>> 9837a2c15bc68b21201d7591d2e26c69c716fe43
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-user"></i> Retry Face Scan';
                     }
                 } catch (error) {
                     status.innerText = "Server Connection Error.";
+<<<<<<< HEAD
+=======
+                    stopScan();
+>>>>>>> 9837a2c15bc68b21201d7591d2e26c69c716fe43
                     btn.disabled = false;
                     btn.innerHTML = '<i class="fas fa-redo"></i> Retry';
                 }
             }, 'image/jpeg', 0.9);
+<<<<<<< HEAD
+=======
+        }
+
+        function stopScan() {
+            document.getElementById('scanLaser').style.display = 'none';
+            isLivenessCheckActive = false;
+            isHeadTurnCheckActive = false;
+>>>>>>> 9837a2c15bc68b21201d7591d2e26c69c716fe43
         }
     </script>
 </body>
