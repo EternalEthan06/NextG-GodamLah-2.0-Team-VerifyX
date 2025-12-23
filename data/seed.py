@@ -59,6 +59,23 @@ def create_database():
             status TEXT
         )
     ''')
+
+    # Create Share Sessions Table (Was missing in seed)
+    cursor.execute('DROP TABLE IF EXISTS share_sessions')
+    cursor.execute('''
+        CREATE TABLE share_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_mykad TEXT,
+            recipient_type TEXT,
+            recipient_id TEXT,
+            otp_code TEXT,
+            status TEXT DEFAULT 'ACTIVE',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME,
+            shared_docs TEXT,
+            allow_download TEXT DEFAULT 'TRUE'
+        )
+    ''')
         
     # ---------------------------------------------------------
     # SEED DATA GENERATION

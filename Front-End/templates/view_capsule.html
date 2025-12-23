@@ -7,21 +7,45 @@
     .main-content {
         display: flex;
         justify-content: center;
-        align-items: center;
-        height: 100vh;
+        align-items: start;
+        /* Align to top to prevent center-clipping on overflow */
+        min-height: 100vh;
+        height: auto;
         background: #f8fafc;
-        padding: 40px;
+        padding: 40px 20px;
+        /* Reduced side padding for mobile, keep vertical */
     }
 
     .container {
         background: white;
         width: 100%;
         max-width: 1200px;
-        height: 800px;
+        min-height: 800px;
+        /* Changed from fixed height */
+        height: auto;
         border-radius: 16px;
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
         overflow: hidden;
         display: flex;
+        flex-direction: row;
+    }
+
+    @media (max-width: 1024px) {
+        .container {
+            flex-direction: column;
+        }
+
+        .list-panel {
+            width: 100%;
+            height: 300px;
+            /* Specific height for mobile list */
+            border-right: none;
+            border-bottom: 1px solid #eee;
+        }
+
+        .preview-panel {
+            min-height: 500px;
+        }
     }
 
     /* LEFT SIDE: LIST */
@@ -222,6 +246,12 @@
             <h2>Shared Documents</h2>
             <p>From: {{ user.full_name }}</p>
             <p style="font-size: 11px; opacity: 1; font-weight: 500; margin-top: 2px;">ID: {{ user.mykad_number }}</p>
+            {% if expires_at %}
+            <div
+                style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 4px; margin-top: 10px; font-size: 11px;">
+                <i class="fas fa-clock"></i> Expires: <span style="font-weight:bold;">{{ expires_at }}</span>
+            </div>
+            {% endif %}
         </div>
         <div class="doc-list">
             {% for doc_key in allowed_docs %}
@@ -249,10 +279,18 @@
                         {% endif %}
                     </h4>
                     <p>Verified Document</p>
+                    {% if allow_download == 'TRUE' %}
                     <a href="/download_secured_doc/{{ share_id }}/{{ doc_key }}"
-                        style="font-size:10px; color:var(--gov-blue); font-weight:bold; margin-top:2px; display:inline-block;">
-                        <i class="fas fa-lock"></i> DOWNLOAD PDF (Pass: {{ session_otp }})
+                        style="font-size:12px; color:var(--gov-blue); font-weight:bold; margin-top:5px; display:inline-block; background: #f1f5f9; padding: 8px 12px; border-radius: 6px; text-decoration: none;">
+                        <i class="fas fa-lock"></i> Download PDF <span
+                            style="color:#ef4444; margin-left:5px;">(Password: {{ session_otp }})</span>
                     </a>
+                    {% else %}
+                    <div
+                        style="font-size:11px; color:#ef4444; font-weight:bold; margin-top:5px; background: #fef2f2; padding: 6px 10px; border-radius: 4px; display: inline-block;">
+                        <i class="fas fa-eye"></i> View Only (Downloads Restricted)
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             {% else %}
@@ -379,5 +417,75 @@
         const defaultItem = document.querySelector('.doc-item.active');
         showPreview('identity', defaultItem);
     });
+</script>
+
+<!-- SCREENSHOT DETERRENCE & SECURITY -->
+<div id="security-overlay"
+    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:999999; align-items:center; justify-content:center; flex-direction:column;">
+    <div style="font-size:50px; color:#ef4444;"><i class="fas fa-eye-slash"></i></div>
+    <h2 style="color:white; margin-top:20px;">Security Mode Active</h2>
+    <p style="color:#aaa; margin-bottom:30px;">Screenshot attempt or window switch detected.</p>
+    <button onclick="resumeSession()"
+        style="padding:10px 20px; background:white; color:black; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">Click
+        to Resume</button>
+</div>
+
+<script>
+    // AGGRESSIVE PROTECTION
+    const overlay = document.getElementById('security-overlay');
+
+    function activateSecurity() {
+        overlay.style.display = 'flex';
+        document.body.style.overflow = 'hidden'; // Lock scroll
+    }
+
+    function resumeSession() {
+        overlay.style.display = 'none';
+        document.body.style.filter = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    // 1. WINDOW FOCUS (Snipping Tool Click / Alt-Tab)
+    window.addEventListener('blur', () => {
+        // Instant hide (No blur, straight to black)
+        activateSecurity();
+        document.title = "Protected - Hidden";
+    });
+
+    // 2. MOUSE LEAVE (Anticipate clicking outside)
+    document.addEventListener('mouseleave', () => {
+        document.body.style.filter = 'blur(10px)'; // Warning blur
+    });
+
+    document.addEventListener('mouseenter', () => {
+        if (overlay.style.display === 'none') {
+            document.body.style.filter = 'none';
+        }
+    });
+
+    // 3. KEYBOARD SHORTCUTS
+    document.addEventListener('keydown', function (e) {
+        // Windows Snipping Shortcut (Win+Shift+S) - Detect WIN key
+        if (e.key === 'Meta' || e.key === 'os') {
+            activateSecurity();
+        }
+
+        // PrintScreen
+        if (e.key === 'PrintScreen') {
+            activateSecurity();
+            alert("Screenshots are prohibited!"); // Blocks checking standard queue?
+        }
+
+        // Ctrl+P / Ctrl+S / Ctrl+Shift+S
+        if (e.ctrlKey && (['p', 's', 'S'].includes(e.key) || (e.shiftKey && ['s', 'S'].includes(e.key)))) {
+            e.preventDefault();
+            activateSecurity();
+        }
+    });
+
+    // 4. PRINT CSS
+    const style = document.createElement('style');
+    style.innerHTML = `@media print { body { display: none !important; } }`;
+    document.head.appendChild(style);
 </script>
 {% endblock %}

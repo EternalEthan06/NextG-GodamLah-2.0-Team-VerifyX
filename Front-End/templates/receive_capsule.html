@@ -321,25 +321,36 @@
             <div class="scanner-container">
                 <div class="scanner-wrapper">
                     <div id="reader"></div>
-                    <div class="scan-overlay"></div> <!-- Vignette only -->
-                    <div class="scan-guide-corners"></div> <!-- Focus Box -->
-                    <div class="scan-laser"></div> <!-- Laser -->
+                    <!-- Overlays removed to allow library UI to function properly if it needs to, or we keep them if we rely on library's video element -->
+                    <!-- We'll keep the styling but ensure z-index doesn't block interactions if the library adds buttons (like file upload) inside 'reader' -->
+                    <div class="scan-overlay"></div>
+                    <div class="scan-guide-corners"></div>
+                    <div class="scan-laser"></div>
                 </div>
             </div>
 
             <p id="qr-status" style="font-size:11px; color:#aaa; margin-top:5px;">
                 <i class="fas fa-camera"></i> Point camera at the Share QR Code
             </p>
+
+            <!-- FALLBACK: FILE UPLOAD -->
+            <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+                <p style="margin-bottom: 10px; font-size: 12px; color: #64748b;">Or upload a QR image:</p>
+                <input type="file" id="qr-input-file" accept="image/*" style="font-size: 12px;">
+            </div>
         </div>
 
         <button type="submit" class="btn-submit" id="submitBtn">
             <i class="fas fa-unlock-alt"></i> Unlock Capsule
         </button>
     </form>
+
+    <!-- Hidden div for file scanner instance -->
+    <div id="qr-file-processor" style="display:none;"></div>
 </div>
 
 <script>
-    let html5QrcodeScanner = null;
+    let html5QrCode = null;
     const inputs = document.querySelectorAll('.digit-box');
     let currentMethod = 'code';
 
@@ -353,43 +364,88 @@
             document.getElementById('qr-section').style.display = 'none';
             document.getElementById('submitBtn').style.display = 'flex';
 
-            // Allow camera to stop to save resources, but keep instance if needed? 
-            // Better to stop it to release camera light.
-            if (html5QrcodeScanner) {
-                html5QrcodeScanner.clear().catch(err => console.log("Stop failed", err));
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    console.log("Camera stopped.");
+                }).catch(err => console.log("Stop failed", err));
             }
         } else {
             document.querySelector('.tab-btn:last-child').classList.add('active');
             document.getElementById('code-section').style.display = 'none';
             document.getElementById('qr-section').style.display = 'block';
-            document.getElementById('submitBtn').style.display = 'none'; // Auto-submit on scan
+            document.getElementById('submitBtn').style.display = 'none';
 
             startScanner();
         }
     }
 
     function startScanner() {
-        if (!html5QrcodeScanner) {
-            html5QrcodeScanner = new Html5QrcodeScanner(
-                "reader", { fps: 10, qrbox: 200, aspectRatio: 1.0, showTorchButtonIfSupported: true });
+        if (!html5QrCode) {
+            html5QrCode = new Html5Qrcode("reader");
         }
 
-        // Slight delay to allow DOM to layout
-        setTimeout(() => {
-            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-        }, 150);
+        const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+
+        // Explicitly request back camera
+        html5QrCode.start(
+            { facingMode: "environment" },
+            config,
+            onScanSuccess,
+            (errorMessage) => {
+                // parse error, ignore for now to avoid spamming console
+            }
+        ).catch(err => {
+            console.error("Error starting camera", err);
+            document.getElementById('qr-status').innerHTML = `<span style="color:#ef4444; font-weight:bold;"><i class="fas fa-exclamation-circle"></i> Camera Error: ${err}. <br>Please allow camera permissions or use File Upload.</span>`;
+        });
     }
+
+    // FILE UPLOAD HANDLER
+    const fileInput = document.getElementById('qr-input-file');
+    fileInput.addEventListener('change', e => {
+        if (e.target.files.length == 0) return;
+
+        const imageFile = e.target.files[0];
+
+        // Use a temporary instance just for the file
+        const fileScanner = new Html5Qrcode("qr-file-processor");
+
+        fileScanner.scanFile(imageFile, true)
+            .then(decodedText => {
+                onScanSuccess(decodedText, null);
+            })
+            .catch(err => {
+                alert("Could not scan QR from this image. Please ensure it is clear.");
+                console.log(`Error scanning file. Reason: ${err}`);
+            });
+    });
 
     function onScanSuccess(decodedText, decodedResult) {
         console.log(`Scan result: ${decodedText}`);
-        html5QrcodeScanner.clear();
 
-        document.getElementById('fullCode').value = decodedText;
+        // Stop camera on success
+        if (html5QrCode) {
+            html5QrCode.stop().then(() => {
+                console.log("Stopped camera");
+            }).catch(err => { });
+        }
+
+        try {
+            // Try Parse JSON (New Format)
+            const data = JSON.parse(decodedText);
+            if (data.id && data.otp) {
+                document.querySelector('input[name="sender_id"]').value = data.id;
+                document.getElementById('fullCode').value = data.otp;
+            } else {
+                // Fallback for partial json
+                document.getElementById('fullCode').value = decodedText;
+            }
+        } catch (e) {
+            // Fallback for legacy (Just OTP string)
+            document.getElementById('fullCode').value = decodedText;
+        }
+
         submitForm();
-    }
-
-    function onScanFailure(error) {
-        // console.warn(`Code scan error = ${error}`);
     }
 
     function handleDigit(el, index) {
@@ -411,6 +467,7 @@
         }
         submitForm();
     });
+
 
     function submitForm() {
         const formData = new FormData(document.getElementById('redeemForm'));

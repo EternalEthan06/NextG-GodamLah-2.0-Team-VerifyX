@@ -25,7 +25,25 @@ Recording.mp4
 
 # Logs
 *.log
+audit_log.json
 
 # IDE
 .vscode/
 .idea/
+
+# Dependencies (if using vendor for third-party libs)
+vendor/
+
+# Runtime Generated Files
+uploads/
+cookies.txt
+data/*.jpg
+data/*.jpeg
+data/*.png
+
+# Temporary/Debug Files
+db_structure.txt
+db_structure_final.txt
+inspect_db.py
+test_*.py
+migrate_db.py

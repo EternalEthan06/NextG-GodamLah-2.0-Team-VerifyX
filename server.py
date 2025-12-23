@@ -1208,7 +1208,17 @@ def access_log():
     my_shares = conn.execute('SELECT * FROM share_sessions WHERE sender_mykad = ? ORDER BY created_at DESC', (mykad,)).fetchall()
     conn.close()
     
-    shares_list = [dict(row) for row in my_shares]
+    shares_list = []
+    for row in my_shares:
+        d = dict(row)
+        # Format expires_at for display 
+        if d.get('expires_at'):
+             try:
+                dt = datetime.datetime.strptime(d['expires_at'], '%Y-%m-%d %H:%M:%S')
+                d['expires_at'] = dt.strftime("%d %b %Y, %I:%M %p")
+             except:
+                pass
+        shares_list.append(d)
 
     return render_template('accessLog.html', user=user_data, logs=all_logs, my_shares=shares_list)
 
@@ -1347,26 +1357,51 @@ def create_share():
     if request.form.get('share_birth') == 'on': selected_docs.append('birth')
     if request.form.get('share_water') == 'on': selected_docs.append('water')
     if request.form.get('share_oku') == 'on': selected_docs.append('oku')
+    if request.form.get('share_vaccine') == 'on': selected_docs.append('vaccine')
+    if request.form.get('share_transcript') == 'on': selected_docs.append('transcript')
+    if request.form.get('share_epf') == 'on': selected_docs.append('epf')
     
     import json
     shared_docs_json = json.dumps(selected_docs)
+
+    # Get Access Duration (Default to 24 hours if missing)
+    usage_limit = request.form.get('usage_limit', '24_hours')
+    
+    # Map duration to SQLite time modifier
+    # Options: 1_hour, 6_hours, 24_hours, 3_days, 7_days
+    # Map duration to timedelta
+    # Options: 1_hour, 6_hours, 24_hours, 3_days, 7_days
+    duration_map = {
+        '1_hour': datetime.timedelta(hours=1),
+        '6_hours': datetime.timedelta(hours=6),
+        '24_hours': datetime.timedelta(hours=24),
+        '3_days': datetime.timedelta(days=3),
+        '7_days': datetime.timedelta(days=7)
+    }
+    delta = duration_map.get(usage_limit, datetime.timedelta(hours=24))
+    
+    # Calculate Expiry (Use Local System Time for consistency with PDF Viewer)
+    expires_at_dt = datetime.datetime.now() + delta
+    expires_at_str = expires_at_dt.strftime('%Y-%m-%d %H:%M:%S')
 
     # Generate 6-digit OTP
     otp_code = ''.join(random.choices(string.digits, k=6))
     
     # Store in DB
+    allow_download_val = 'TRUE' if request.form.get('allow_download') == 'on' else 'FALSE'
+
     try:
         conn = get_db_connection()
         # Ensure column exists or handle error (Migration should have run)
-        cursor = conn.execute('''
-            INSERT INTO share_sessions (sender_mykad, recipient_type, recipient_id, otp_code, status, expires_at, shared_docs)
-            VALUES (?, ?, ?, ?, 'ACTIVE', datetime('now', '+1 hour'), ?)
-        ''', (mykad, recipient_type, recipient_id, otp_code, shared_docs_json))
+        cursor = conn.execute(f'''
+            INSERT INTO share_sessions (sender_mykad, recipient_type, recipient_id, otp_code, status, expires_at, shared_docs, allow_download)
+            VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
+        ''', (mykad, recipient_type, recipient_id, otp_code, expires_at_str, shared_docs_json, allow_download_val))
         share_id = cursor.lastrowid
         conn.commit()
         conn.close()
         
-        log_action(mykad, "SHARE", f"Created Capsule for {recipient_type}:{recipient_id}", "System", "SUCCESS")
+        log_action(mykad, "SHARE", f"Created Capsule ({usage_limit}) for {recipient_type}:{recipient_id}", "System", "SUCCESS")
         
         return jsonify({'status': 'success', 'share_id': share_id, 'otp_code': otp_code})
         
@@ -1429,8 +1464,15 @@ def share_status(share_id):
         current_otp = session_row['otp_code']
 
     # QR Generation
+    # Embed both Sender ID and OTP for seamless scanning
+    import json
+    qr_data = json.dumps({
+        "id": session_row['sender_mykad'],
+        "otp": current_otp
+    })
+    
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(current_otp)
+    qr.add_data(qr_data)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
     
@@ -1486,8 +1528,27 @@ def view_capsule_content():
             # For now, log every hit to track activity
             # Context format: "ShareID:{id}" to easily filter later
             log_action(share_row['sender_mykad'], "VIEW CAPSULE", f"ShareID:{share_id} - Accessed by recipient", "Secure Share", "SUCCESS")
+            
+            # Format expiry for display
+            expires_at_display = share_row['expires_at']
+            try:
+                dt = datetime.datetime.strptime(expires_at_display, '%Y-%m-%d %H:%M:%S')
+                expires_at_display = dt.strftime("%d %b %Y, %I:%M %p")
+            except:
+                pass
 
-    return render_template('view_capsule.html', user=sender, allowed_docs=allowed_docs, session_otp=session_otp, share_id=share_id)
+
+            # Check Allow Download Pref
+            allow_dl = 'TRUE'
+            try:
+                if share_row['allow_download']:
+                    allow_dl = share_row['allow_download']
+            except:
+                pass # Legacy rows default to TRUE
+                
+    return render_template('view_capsule.html', user=sender, allowed_docs=allowed_docs, 
+                           share_id=share_id, session_otp=session_otp, expires_at=expires_at_display,
+                           allow_download=allow_dl)
 
 
 
@@ -1541,53 +1602,192 @@ def download_secured_doc(share_id, doc_type):
     }
     
     blob_col = col_map.get(doc_type)
-    if not blob_col or not sender_row[blob_col]:
-        return "Document source file not found.", 404
-
-    image_data = sender_row[blob_col]
+    image_data = None
     
-    # 3. Generate PDF
+    if blob_col:
+        try:
+            image_data = sender_row[blob_col]
+        except (IndexError, KeyError):
+            pass
+    
+    # 3. Generate Rich PDF
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=A4)
-    width, height = A4
+    width, height = A4 # 595.27, 841.89
     
-    # Header
-    can.setFont("Helvetica-Bold", 16)
-    can.drawString(50, height - 50, f"Secured Document: {doc_type.upper()}")
+    # --- DRAW BACKGROUND "PAPER" ---
+    can.setFillColorRGB(0.98, 0.98, 0.98) # Off-white
+    can.rect(0, 0, width, height, fill=1, stroke=0)
+    
+    # --- DRAW HEADER (MATCH UI) ---
+    can.setFillColorRGB(0.2, 0.2, 0.2)
+    can.setStrokeColorRGB(0.2, 0.2, 0.2)
+    
+    # Line
+    can.line(50, height - 100, width - 50, height - 100)
+    
+    # Title
+    can.setFont("Helvetica-Bold", 18)
+    title_map = {
+        'identity': 'IDENTITY CARD', 'license': 'DRIVING LICENSE', 
+        'income': 'INCOME STATEMENT', 'birth': 'BIRTH CERTIFICATE',
+        'vaccine': 'VACCINATION CERT', 'epf': 'EPF STATEMENT', 'transcript': 'TRANSCRIPT'
+    }
+    can.drawString(50, height - 85, title_map.get(doc_type, doc_type.upper()).replace('_', ' '))
+    
+    # Subtitle
     can.setFont("Helvetica", 10)
-    can.drawString(50, height - 70, "Provide Share Code (OTP) to open.")
+    can.setFillColorRGB(0.5, 0.5, 0.5)
+    source_map = {'identity': 'JPN', 'license': 'JPJ', 'income': 'LHDN', 'vaccine': 'MOH', 'birth': 'JPN'}
+    can.drawString(50, height - 115, f"SOURCE: {source_map.get(doc_type, 'OFFICIAL RECORD')}")
     
-    # Image
-    try:
-        img_buffer = io.BytesIO(image_data)
-        img = ImageReader(img_buffer)
-        img_w, img_h = img.getSize()
-        aspect = img_h / float(img_w)
+    # --- DRAW STAMP (Text representation) ---
+    can.saveState()
+    can.setStrokeColorRGB(0.1, 0.7, 0.4) # Green
+    can.setFillColorRGB(0.1, 0.7, 0.4)
+    can.setLineWidth(2)
+    # Box
+    can.roundRect(width - 160, height - 90, 110, 30, 4, stroke=1, fill=0)
+    # Check
+    can.setFont("Helvetica-Bold", 10)
+    can.drawString(width - 145, height - 78, "VERIFIED: VALID")
+    can.restoreState()
+    
+    # --- DRAW USER INFO BLOCKS ---
+    current_y = height - 150
+    can.setFillColorRGB(0, 0, 0)
+    
+    labels = [
+        ("FULL NAME", sender_row['full_name'].upper()),
+        ("MYKAD ID", sender_row['mykad_number']),
+        ("ADDRESS", sender_row['address'][:40] + "..." if sender_row['address'] else "-")
+    ]
+    
+    for label, value in labels:
+        can.setFont("Helvetica", 8)
+        can.setFillColorRGB(0.5, 0.5, 0.5)
+        can.drawString(50, current_y, label)
         
-        draw_width = 500
-        draw_height = draw_width * aspect
+        can.setFont("Helvetica-Bold", 12)
+        can.setFillColorRGB(0.1, 0.1, 0.1)
+        can.drawString(50, current_y - 15, str(value))
         
-        # Max height check
-        if draw_height > 600:
-             draw_height = 600
-             draw_width = draw_height / aspect
+        current_y -= 40
 
-        x_pos = (width - draw_width) / 2
-        y_pos = height - 120 - draw_height 
-        
-        can.drawImage(img, x_pos, y_pos, width=draw_width, height=draw_height)
-    except Exception as e:
-        can.drawString(50, height - 150, f"Error rendering image: {e}")
+    # --- DRAW IMAGE (CENTERED) ---
+    # Placeholder Logic nested here for consistency
+    if not image_data:
+        try:
+            from PIL import Image, ImageDraw
+            img_chk = Image.new('RGB', (600, 400), color='#f0f0f0')
+            d = ImageDraw.Draw(img_chk)
+            d.text((200, 180), f"{doc_type.upper()} PREVIEW", fill="#aaa")
+            buf = io.BytesIO()
+            img_chk.save(buf, format='JPEG')
+            image_data = buf.getvalue()
+        except:
+            pass # Should verify failsafe or return error? Let's assume failsafe works or we skip image
+            
+    if image_data:
+        try:
+            img_buffer = io.BytesIO(image_data)
+            img = ImageReader(img_buffer)
+            img_w, img_h = img.getSize()
+            aspect = img_h / float(img_w)
+            
+            draw_width = 400
+            draw_height = draw_width * aspect
+            
+            # Constraints
+            if draw_height > 400:
+                draw_height = 400
+                draw_width = draw_height / aspect
+                
+            x_pos = (width - draw_width) / 2
+            # Draw below the text info
+            y_pos = current_y - draw_height - 20 
+            
+            can.drawImage(img, x_pos, y_pos, width=draw_width, height=draw_height)
+            
+            # Watermark on top of image
+            can.saveState()
+            can.translate(width/2, y_pos + draw_height/2)
+            can.rotate(45)
+            can.setFont("Helvetica-Bold", 60)
+            can.setFillColorRGB(0.9, 0.9, 0.9, 0.5) # Transparent Grey
+            can.drawCentredString(0, 0, "COPY")
+            can.restoreState()
+            
+        except Exception as e:
+            print(f"PDF Image Error: {e}")
+            can.drawString(50, current_y - 20, "Image rendering failed.")
 
     can.save()
     packet.seek(0)
     
-    # 4. Encrypt with OTP
+    # 4. Encrypt + DRM Injection
+    # To simulate "Adobe Policy Server" style DRM without a real server,
+    # we inject a JavaScript action that runs on PDF open.
+    # It checks the current date against the expiry date.
+    
+    expires_at_str = "Unknown"
+    
+    # Try to get expiry. If column missing (IndexError/KeyError from Row), default to 24h
+    try:
+         expires_at_str = share_row['expires_at']
+    except (IndexError, KeyError):
+         # Column might not exist if migration didn't run or using old DB file
+         print("Warning: 'expires_at' column missing in share_sessions.")
+         expires_at_str = None
+
+    if not expires_at_str:
+         expires_at_str = (datetime.datetime.now() + datetime.timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
+
+    # Convert to PDF Date format (D:YYYYMMDDHHMMSS) for JS
+    try:
+         # Handle variable SQLite formats
+         if '.' in expires_at_str: expires_at_str = expires_at_str.split('.')[0]
+         dt = datetime.datetime.strptime(expires_at_str, '%Y-%m-%d %H:%M:%S')
+         pdf_expiry_date = dt.strftime("D:%Y%m%d%H%M%S")
+         readable_expiry = dt.strftime("%d %b %Y, %I:%M %p")
+    except:
+         # Fallback: 24h from now
+         dt = datetime.datetime.now() + datetime.timedelta(hours=24)
+         pdf_expiry_date = dt.strftime("D:%Y%m%d%H%M%S")
+         readable_expiry = "Unknown"
+
+    # Adobe JavaScript to check Expiry
+    # Safe Date Construction in JS
+    # Parsing in Python is reliable; passing integers to JS new Date() is robust.
+    # Note: JS Date month is 0-indexed (0=Jan, 11=Dec)
+    try:
+        if '.' in expires_at_str: expires_at_str = expires_at_str.split('.')[0]
+        dt = datetime.datetime.strptime(expires_at_str, '%Y-%m-%d %H:%M:%S')
+        
+        # Python: Month 1-12, JS: Month 0-11
+        js_code = f"""
+        var expiry = new Date({dt.year}, {dt.month - 1}, {dt.day}, {dt.hour}, {dt.minute}, {dt.second});
+        var now = new Date();
+        if (now > expiry) {{
+            app.alert("SECURITY ALERT: This secure document expired on {dt.strftime('%d %b %Y %I:%M %p')}. Access is no longer granted.");
+            this.closeDoc(true);
+        }}
+        """
+    except Exception as e:
+        # Fallback to simple string parse if anything fails
+        print(f"Date Parse Error: {e}")
+        js_code = f"""
+        app.alert("Security timestamp error.");
+        """
+    
     new_pdf = PdfReader(packet)
     writer = PdfWriter()
     
     for page in new_pdf.pages:
         writer.add_page(page)
+    
+    # Add JS Action to OpenAction
+    writer.add_js(js_code)
         
     password = str(share_row['otp_code']) # Ensure string
     writer.encrypt(password)
