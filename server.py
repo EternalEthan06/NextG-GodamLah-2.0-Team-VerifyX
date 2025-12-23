@@ -28,7 +28,10 @@ import base64
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
+from reportlab.lib.utils import ImageReader
 from pypdf import PdfReader, PdfWriter
+from utils.security import signer, merkle_tree # Layer 1 & 2 Security
+import json
 
 # Initialize Flask
 app = Flask(__name__, static_folder='static', template_folder='Front-End/templates') # Explicitly set folders
@@ -300,6 +303,14 @@ def handle_login():
     mykad = data.get('ic-number', '').strip()
     password = data.get('password', '').strip()
     print(f"DEBUG: Handle Login for MyKad: '{mykad}'")
+
+    # --- MOCK JPN ACCOUNT ---
+    if mykad == "mockjpn" and password == "password123":
+        session['user_mykad'] = "mockjpn"
+        session['user_name'] = "JPN Officer"
+        session['vault_access_granted'] = True
+        session['is_issuer'] = True
+        return jsonify({'status': 'success', 'redirect': url_for('issuer_dashboard')})
 
     user_record = fetch_user_record_by_mykad(mykad)
     
@@ -738,6 +749,337 @@ def step_complete():
             log_action(mykad, "BIOMETRIC_LOGIN", "2 Factors", "System", "SUCCESS")
             return redirect(url_for('dashboard'))
 
+# --- ISSUER PORTAL ---
+@app.route('/issuer/dashboard')
+def issuer_dashboard():
+    if session.get('user_mykad') != 'mockjpn':
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    citizens = conn.execute('SELECT * FROM citizens').fetchall()
+    logs = conn.execute("SELECT * FROM access_logs WHERE action='ISSUANCE' ORDER BY timestamp DESC LIMIT 10").fetchall()
+    conn.close()
+    
+    # Mock user for base.html
+    mock_user = {
+        'full_name': 'JPN OFFICER',
+        'mykad_number': 'ISSUER-ID-01'
+    }
+    
+    return render_template('issuer_dashboard.html', citizens=citizens, logs=logs, user=mock_user)
+
+@app.route('/issuer/issue', methods=['POST'])
+def issue_certificate():
+    if session.get('user_mykad') != 'mockjpn':
+        return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 403
+
+    target_mykad = request.form.get('mykad')
+    
+    # 1. Fetch Citizen
+    conn = get_db_connection()
+    user = conn.execute('SELECT full_name FROM citizens WHERE mykad_number = ?', (target_mykad,)).fetchone()
+    
+    if not user:
+        conn.close()
+        return jsonify({'status': 'failure', 'message': 'Citizen not found'})
+
+    # 2. Construct Certificate Data
+    cert_data = {
+        "type": "BIRTH_CERTIFICATE",
+        "mykad": target_mykad,
+        "name": user['full_name'],
+        "issuer": "JPN MALAYSIA",
+        "date_issued": datetime.datetime.now().isoformat()
+    }
+
+    # 3. Layer 2: Sign Data
+    signature = signer.sign_data(cert_data)
+
+    # 4. Layer 1: Anchor to Merkle Tree
+    # Create a hash of the signed package to be the leaf
+    leaf_content = json.dumps(cert_data) + signature
+    merkle_root = merkle_tree.add_leaf(leaf_content)
+
+    # 5. Create Final Package
+    final_package = {
+        "data": cert_data,
+        "signature": signature,
+        "merkle_root": merkle_root, 
+        "verification_status": "SECURED"
+    }
+    
+    final_json = json.dumps(final_package)
+
+    # 6. Store in DB (Simulating issuance)
+    # We overwrite the 'birth_cert_enc' column which was previously just a string
+    conn.execute('UPDATE citizens SET birth_cert_enc = ? WHERE mykad_number = ?', (final_json, target_mykad))
+    conn.commit()
+    conn.close()
+
+    # 7. Log
+    log_action(target_mykad, "ISSUANCE", "Birth Cert Issued (L1+L2)", "JPN", "SUCCESS")
+
+    return jsonify({'status': 'success', 'message': f'Certificate issued to {user["full_name"]}'})
+
+@app.route('/issuer/issue-bulk', methods=['POST'])
+def issue_certificate_bulk():
+    if session.get('user_mykad') != 'mockjpn':
+        return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 403
+
+    data = request.get_json()
+    mykads = data.get('mykads', [])
+    
+    if not mykads:
+        return jsonify({'status': 'failure', 'message': 'No citizens selected'})
+
+    conn = get_db_connection()
+    success_count = 0
+    errors = []
+
+    for target_mykad in mykads:
+        try:
+             # 1. Fetch Citizen
+            user = conn.execute('SELECT full_name FROM citizens WHERE mykad_number = ?', (target_mykad,)).fetchone()
+            
+            if not user:
+                errors.append(f"{target_mykad}: Not Found")
+                continue
+
+            # 2. Construct Certificate Data
+            cert_data = {
+                "type": "BIRTH_CERTIFICATE",
+                "mykad": target_mykad,
+                "name": user['full_name'],
+                "issuer": "JPN MALAYSIA",
+                "date_issued": datetime.datetime.now().isoformat()
+            }
+
+            # 3. Layer 2: Sign Data
+            signature = signer.sign_data(cert_data)
+
+            # 4. Layer 1: Anchor to Merkle Tree
+            leaf_content = json.dumps(cert_data) + signature
+            merkle_root = merkle_tree.add_leaf(leaf_content)
+
+            # 5. Create Final Package
+            final_package = {
+                "data": cert_data,
+                "signature": signature,
+                "merkle_root": merkle_root, 
+                "verification_status": "SECURED"
+            }
+            
+            final_json = json.dumps(final_package)
+
+            # 6. Store
+            conn.execute('UPDATE citizens SET birth_cert_enc = ? WHERE mykad_number = ?', (final_json, target_mykad))
+            
+            # 7. Log
+            # We can log individually but for bulk maybe just one log or individual?
+            # Individual logs are better for audit trail.
+            # Using the existing log function which opens its own connection is inefficient here inside a loop if we had thousands, 
+            # but for <100 it's fine. However, we have an open connection 'conn'.
+            # Let's write to access_logs directly using 'conn' to be safe with locking.
+            conn.execute('''INSERT INTO access_logs (mykad_number, action, context, organization_name, status)VALUES (?, ?, ?, ?, ?)''', 
+                     (target_mykad, "ISSUANCE", "Birth Cert Issued (Bulk)", "JPN", "SUCCESS"))
+            
+            success_count += 1
+            
+        except Exception as e:
+            print(f"Error issuing for {target_mykad}: {e}")
+            errors.append(f"{target_mykad}: Failed")
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'status': 'success', 
+        'message': f'Successfully issued {success_count} certificates.',
+        'errors': errors
+    })
+
+
+@app.route('/issuer/edit/<mykad>')
+def issue_certificate_edit_page(mykad):
+    if session.get('user_mykad') != 'mockjpn':
+        return redirect(url_for('login'))
+        
+    conn = get_db_connection()
+    user = conn.execute('SELECT full_name, mykad_number, address, birth_cert_enc FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
+    conn.close()
+    
+    if not user:
+        return "Citizen not found", 404
+
+    # Default values or try to parse existing cert if available
+    defaults = {
+        'name': user['full_name'],
+        'mykad': user['mykad_number'],
+        'dob': "20" + user['mykad_number'][0:2] + "-" + user['mykad_number'][2:4] + "-" + user['mykad_number'][4:6], # Simple guess
+        'pob': "KUALA LUMPUR",
+        'address': user['address'] or "NO 123, JALAN MERDEKA, 50000 KUALA LUMPUR",
+        'father': "ALI BIN AHMAD",
+        'mother': "SITI BINTI ABU"
+    }
+
+    # If already issued L2 cert, try to pre-fill from that (JSON)
+    if user['birth_cert_enc'] and '{' in user['birth_cert_enc']:
+        try:
+             package = json.loads(user['birth_cert_enc'])
+             data = package.get('data', {})
+             defaults['name'] = data.get('name', defaults['name'])
+             defaults['dob'] = data.get('dob', defaults['dob'])
+             defaults['pob'] = data.get('pob', defaults['pob'])
+             defaults['address'] = data.get('address', defaults['address'])
+             defaults['father'] = data.get('father', defaults['father'])
+             defaults['mother'] = data.get('mother', defaults['mother'])
+        except:
+            pass
+
+    # Mock user for base.html
+    mock_user = {
+        'full_name': 'JPN OFFICER',
+        'mykad_number': 'ISSUER-ID-01'
+    }
+
+    return render_template('issuer_edit_cert.html', citizen=defaults, user=mock_user)
+
+
+@app.route('/issuer/issue-custom', methods=['POST'])
+def issue_certificate_custom():
+    if session.get('user_mykad') != 'mockjpn':
+        return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 403
+
+    target_mykad = request.form.get('mykad')
+    
+    # Construct Certificate Data from Form
+    cert_data = {
+        "type": "BIRTH_CERTIFICATE",
+        "mykad": target_mykad,
+        "name": request.form.get('name'),
+        "dob": request.form.get('dob'),
+        "pob": request.form.get('pob'), # Place of Birth
+        "address": request.form.get('address'),
+        "father": request.form.get('father'),
+        "mother": request.form.get('mother'),
+        "issuer": "JPN MALAYSIA",
+        "date_issued": datetime.datetime.now().isoformat()
+    }
+
+    # Layer 2: Sign Data
+    signature = signer.sign_data(cert_data)
+
+    # Layer 1: Anchor to Merkle Tree
+    leaf_content = json.dumps(cert_data) + signature
+    merkle_root = merkle_tree.add_leaf(leaf_content)
+
+    # Final Package
+    final_package = {
+        "data": cert_data,
+        "signature": signature,
+        "merkle_root": merkle_root, 
+        "verification_status": "SECURED"
+    }
+    
+    final_json = json.dumps(final_package)
+
+    # Store
+    conn = get_db_connection()
+    conn.execute('UPDATE citizens SET birth_cert_enc = ? WHERE mykad_number = ?', (final_json, target_mykad))
+    
+    # Log
+    conn.execute('''INSERT INTO access_logs (mykad_number, action, context, organization_name, status)VALUES (?, ?, ?, ?, ?)''', 
+             (target_mykad, "ISSUANCE", "Birth Cert Issued (Custom)", "JPN", "SUCCESS"))
+    
+    conn.commit()
+    conn.close()
+
+    return jsonify({'status': 'success', 'message': f'Custom Certificate issued for {target_mykad}'})
+
+
+@app.route('/issuer/api/history/<mykad>')
+def get_citizen_history(mykad):
+    if session.get('user_mykad') != 'mockjpn':
+        return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 403
+        
+    conn = get_db_connection()
+    try:
+        # Try fetching with timestamp
+        logs = conn.execute('SELECT action, context, timestamp, status FROM access_logs WHERE mykad_number = ? ORDER BY id DESC', (mykad,)).fetchall()
+    except Exception:
+        # Fallback if timestamp column missing (older schema)
+        logs = conn.execute('SELECT action, context, "2025-12-23 (Est)" as timestamp, status FROM access_logs WHERE mykad_number = ? ORDER BY id DESC', (mykad,)).fetchall()
+    
+    conn.close()
+    
+    history = []
+    for log in logs:
+        history.append({
+            'action': log['action'],
+            'context': log['context'],
+            'timestamp': log['timestamp'] if log['timestamp'] else "N/A",
+            'status': log['status']
+        })
+        
+    return jsonify({'status': 'success', 'history': history})
+
+
+@app.route('/issuer/logs')
+def issuer_logs_page():
+    if session.get('user_mykad') != 'mockjpn':
+        return redirect(url_for('login'))
+        
+    conn = get_db_connection()
+    try:
+        # Fetch only JPN logs (Issuer actions)
+        logs = conn.execute("SELECT action, context, timestamp, status, mykad_number, organization_name FROM access_logs WHERE organization_name = 'JPN' ORDER BY id DESC").fetchall()
+    except Exception:
+         # Fallback
+        logs = conn.execute("SELECT action, context, '2025-12-23 (Est)' as timestamp, status, mykad_number, organization_name FROM access_logs WHERE organization_name = 'JPN' ORDER BY id DESC").fetchall()
+    
+    conn.close()
+    
+    # Mock user for base.html
+    mock_user = {
+        'full_name': 'JPN OFFICER',
+        'mykad_number': 'ISSUER-ID-01'
+    }
+
+    return render_template('issuer_logs.html', logs=logs, user=mock_user)
+
+
+# --- VERIFICATION ENDPOINT (For Citizen Button) ---
+@app.route('/verify-document')
+def verify_document():
+    doc_type = request.args.get('type')
+    
+    # We currently only support birth_cert for this demo
+    if doc_type != 'birth_certificate':
+        return jsonify({'valid': False, 'message': 'Validation not supported'})
+    
+    user_data, mykad = get_user_context()
+    if not user_data:
+         return jsonify({'valid': False, 'message': 'Session Error'})
+
+    # Get the blob
+    cert_blob = user_data['birth_cert_enc']
+    
+    try:
+        package = json.loads(cert_blob)
+        data = package['data']
+        signature = package['signature']
+        
+        # Verify Layer 2 (Signature)
+        if signer.verify_signature(data, signature):
+            return jsonify({'valid': True, 'message': 'Signature Verified (L2) & Anchored (L1)'})
+        else:
+             return jsonify({'valid': False, 'message': 'Signature Invalid'})
+
+    except Exception as e:
+        print(f"Verify Error: {e}")
+        return jsonify({'valid': False, 'message': 'Legacy or Corrupt Document'})
+
+
 # --- RETURNING USER SELECTION HANDLER (Untouched) ---
 
 
@@ -771,6 +1113,35 @@ def my_files_entry():
     if not user_data: 
         return redirect(url_for('login'))
     
+    # Parse Birth Certificate Data if available (L1/L2 format)
+    birth_cert_data = None
+    if user_data.get('birth_cert_enc') and '{' in user_data['birth_cert_enc']:
+        try:
+            package = json.loads(user_data['birth_cert_enc'])
+            birth_cert_data = package.get('data')
+            # Ensure keys exist to avoid JS errors if partial
+            if birth_cert_data:
+                 birth_cert_data.setdefault('name', user_data['full_name'])
+                 birth_cert_data.setdefault('dob', f"{str(mykad)[0:2]}-{str(mykad)[2:4]}-{str(mykad)[4:6]}")
+                 birth_cert_data.setdefault('pob', "KUALA LUMPUR")
+                 birth_cert_data.setdefault('address', user_data['address'])
+                 birth_cert_data.setdefault('father', "ALI BIN AHMAD")
+                 birth_cert_data.setdefault('mother', "SITI BINTI ABU")
+        except:
+            print("Error parsing birth cert JSON for display")
+            pass
+            
+    # Fallback if no valid JSON cert found use existing DB user_data
+    if not birth_cert_data:
+        birth_cert_data = {
+            'name': user_data['full_name'],
+            'dob': f"{str(mykad)[0:2]}-{str(mykad)[2:4]}-{str(mykad)[4:6]}",
+            'pob': "KUALA LUMPUR", # Default
+            'address': user_data['address'],
+            'father': "ALI BIN AHMAD", # Default
+            'mother': "SITI BINTI ABU" # Default
+        }
+
     # Create file list from DB data
     files_list = []
 
@@ -790,7 +1161,7 @@ def my_files_entry():
     
     if user_data['oku_status'] == 'Active':
         oku_status = 'Active'
-    else:
+    else:\
         oku_status = 'Not Applicable'
 
     files_list.append({
@@ -800,7 +1171,7 @@ def my_files_entry():
         'icon': 'fa-wheelchair'
     })    
 
-    return render_template('allFiles.html', user = user_data, files = files_list)
+    return render_template('allFiles.html', user = user_data, files = files_list, cert_data = birth_cert_data)
 
 @app.route('/share')
 def share():

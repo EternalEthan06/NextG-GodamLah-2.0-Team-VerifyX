@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Certificate | VerifyX{% endblock %}
+
+{% block styles %}
+<style>
+    .editor-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+        height: calc(100vh - 100px);
+    }
+
+    /* LEFT: FORM */
+    .edit-form-panel {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        overflow-y: auto;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #64748b;
+        margin-bottom: 8px;
+    }
+
+    .form-group input,
+    .form-group textarea {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border 0.3s;
+    }
+
+    .form-group input:focus {
+        border-color: var(--gov-blue);
+        outline: none;
+    }
+
+    /* RIGHT: PREVIEW */
+    .preview-panel {
+        background: #f8fafc;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        border: 2px dashed #cbd5e1;
+    }
+
+    .certificate-mockup {
+        background: white;
+        width: 100%;
+        max-width: 500px;
+        aspect-ratio: 1 / 1.414;
+        padding: 40px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .cert-header {
+        text-align: center;
+        border-bottom: 2px solid #000;
+        padding-bottom: 20px;
+        margin-bottom: 30px;
+    }
+
+    .cert-title {
+        font-family: 'Times New Roman', serif;
+        font-size: 24px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+
+    .cert-row {
+        margin-bottom: 15px;
+        display: flex;
+        border-bottom: 1px dotted #ccc;
+        padding-bottom: 5px;
+    }
+
+    .cert-label {
+        width: 140px;
+        font-weight: bold;
+        font-size: 12px;
+        text-transform: uppercase;
+    }
+
+    .cert-value {
+        flex: 1;
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        color: #000;
+    }
+
+    .cert-signature {
+        margin-top: auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+    }
+
+    .action-bar {
+        margin-top: 30px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 15px;
+    }
+
+    .cancel-btn {
+        padding: 12px 25px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background: white;
+        color: #64748b;
+        cursor: pointer;
+        text-decoration: none;
+        font-weight: 600;
+    }
+
+    .submit-btn {
+        padding: 12px 25px;
+        border: none;
+        border-radius: 8px;
+        background: var(--gov-blue);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.3s;
+    }
+
+    .submit-btn:hover {
+        background: var(--gov-dark);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="color: var(--gov-blue); margin-bottom: 20px;">Edit Certificate Details</h1>
+
+<form id="editForm" class="editor-container" onsubmit="return false;">
+    <!-- LEFT: INPUTS -->
+    <div class="edit-form-panel">
+        <h3 style="margin-bottom: 25px; color: var(--gov-blue);"><i class="fas fa-edit"></i> Citizen Information</h3>
+
+        <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" name="name" value="{{ citizen.name }}" oninput="updatePreview('pName', this.value)">
+        </div>
+
+        <div class="form-group">
+            <label>MyKad Number (ID)</label>
+            <input type="text" name="mykad" value="{{ citizen.mykad }}" readonly
+                style="background: #f1f5f9; cursor: not-allowed;">
+        </div>
+
+        <div class="form-group">
+            <label>Date of Birth</label>
+            <input type="text" name="dob" value="{{ citizen.dob }}" oninput="updatePreview('pDob', this.value)">
+        </div>
+
+        <div class="form-group">
+            <label>Place of Birth</label>
+            <input type="text" name="pob" value="{{ citizen.pob }}" oninput="updatePreview('pPob', this.value)">
+        </div>
+
+        <div class="form-group">
+            <label>Address</label>
+            <textarea name="address" rows="3"
+                oninput="updatePreview('pAddress', this.value)">{{ citizen.address }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Father's Name</label>
+            <input type="text" name="father" value="{{ citizen.father }}"
+                oninput="updatePreview('pFather', this.value)">
+        </div>
+
+        <div class="form-group">
+            <label>Mother's Name</label>
+            <input type="text" name="mother" value="{{ citizen.mother }}"
+                oninput="updatePreview('pMother', this.value)">
+        </div>
+
+        <div class="action-bar">
+            <a href="{{ url_for('issuer_dashboard_page') if issuer_dashboard_page is defined else '/issuer/dashboard' }}"
+                class="cancel-btn">Cancel</a>
+            <button class="submit-btn" onclick="submitCustomIssuance()">
+                <i class="fas fa-certificate"></i> Issue Updated Certificate
+            </button>
+        </div>
+    </div>
+
+    <!-- RIGHT: PREVIEW -->
+    <div class="preview-panel">
+        <div class="certificate-mockup">
+            <div class="cert-header">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/2/26/Coat_of_arms_of_Malaysia.svg"
+                    style="width: 60px; margin-bottom: 10px;">
+                <div class="cert-title">Birth Certificate</div>
+                <div style="font-size: 10px; letter-spacing: 5px;">MALAYSIA</div>
+            </div>
+
+            <div class="cert-row">
+                <div class="cert-label">Name</div>
+                <div class="cert-value" id="pName">{{ citizen.name }}</div>
+            </div>
+            <div class="cert-row">
+                <div class="cert-label">ID No.</div>
+                <div class="cert-value">{{ citizen.mykad }}</div>
+            </div>
+            <div class="cert-row">
+                <div class="cert-label">Date of Birth</div>
+                <div class="cert-value" id="pDob">{{ citizen.dob }}</div>
+            </div>
+            <div class="cert-row">
+                <div class="cert-label">Place of Birth</div>
+                <div class="cert-value" id="pPob">{{ citizen.pob }}</div>
+            </div>
+            <div class="cert-row">
+                <div class="cert-label">Address</div>
+                <div class="cert-value" id="pAddress" style="font-size: 11px;">{{ citizen.address }}</div>
+            </div>
+            <div class="cert-row">
+                <div class="cert-label">Father</div>
+                <div class="cert-value" id="pFather">{{ citizen.father }}</div>
+            </div>
+            <div class="cert-row">
+                <div class="cert-label">Mother</div>
+                <div class="cert-value" id="pMother">{{ citizen.mother }}</div>
+            </div>
+
+            <div class="cert-signature">
+                <div style="text-align: center;">
+                    <div style="font-family: 'Dancing Script', cursive; font-size: 20px; color: var(--gov-blue);">JPN
+                        Officer</div>
+                    <div style="border-top: 1px solid #000; margin-top: 5px; font-size: 10px;">Registrar General</div>
+                </div>
+                <div
+                    style="border: 2px solid var(--gov-gold); color: var(--gov-gold); padding: 5px 10px; font-weight: bold; font-size: 12px; transform: rotate(-5deg);">
+                    VERIFIED
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<script>
+    function updatePreview(id, val) {
+        document.getElementById(id).innerText = val;
+    }
+
+    async function submitCustomIssuance() {
+        if (!confirm("Confirm issuance of this modified certificate? This will overwrite any existing certificate.")) return;
+
+        const form = document.getElementById('editForm');
+        const formData = new FormData(form);
+
+        try {
+            const btn = document.querySelector('.submit-btn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            btn.disabled = true;
+
+            const response = await fetch('/issuer/issue-custom', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                alert("Certificate Issued Successfully!");
+                window.location.href = '/issuer/dashboard';
+            } else {
+                alert("Error: " + result.message);
+                btn.innerHTML = '<i class="fas fa-certificate"></i> Issue Updated Certificate';
+                btn.disabled = false;
+            }
+        } catch (e) {
+            console.error(e);
+            alert("System Error");
+        }
+    }
+</script>
+{% endblock %}

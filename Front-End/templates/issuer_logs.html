@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Logs | VerifyX{% endblock %}
+
+{% block styles %}
+<style>
+    .logs-container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .log-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+
+    .log-table th {
+        text-align: left;
+        padding: 12px;
+        background-color: #f8fafc;
+        color: #64748b;
+        font-size: 13px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .log-table td {
+        padding: 12px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 14px;
+        color: #334155;
+    }
+
+    .status-badge-success {
+        background-color: #dcfce7;
+        color: #166534;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: bold;
+    }
+
+    .status-badge-fail {
+        background-color: #fee2e2;
+        color: #991b1b;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="logs-container">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h1 style="color: var(--gov-blue); margin: 0;"><i class="fas fa-clipboard-list"></i> Global Audit Trail</h1>
+            <p style="color: #64748b; margin-top: 5px;">Complete verifiable log of all system actions.</p>
+        </div>
+        <a href="{{ url_for('issuer_dashboard_page') if issuer_dashboard_page is defined else '/issuer/dashboard' }}"
+            style="background: #e2e8f0; color: #475569; padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: 600;">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+
+    <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>MyKad ID</th>
+                    <th>Action</th>
+                    <th>Details</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td style="font-family: monospace; color: #64748b;">{{ log.timestamp }}</td>
+                    <td style="font-weight: 600;">{{ log.mykad_number }}</td>
+                    <td>{{ log.action }}</td>
+                    <td>{{ log.context }}</td>
+                    <td>
+                        <span class="{{ 'status-badge-success' if log.status == 'SUCCESS' else 'status-badge-fail' }}">
+                            {{ log.status }}
+                        </span>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align: center; color: #888;">No logs found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

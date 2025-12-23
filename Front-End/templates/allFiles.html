@@ -361,6 +361,8 @@
     const title = document.getElementById('modalTitle');
     const body = document.getElementById('modalBody');
     let currentViewKey = null;
+    // Inject secure certificate data from server
+    const certData = {{ cert_data | tojson }} || {};
 
     // MOCK DATA for Previews - Now dynamic with Jinja
     const docs = {
@@ -444,12 +446,16 @@
             title: 'BIRTH CERTIFICATE',
             source: 'JPN',
             icon: 'fa-baby',
-            color: '#003366',
-            share_key: 'birth',
+            color: '#2c3e50',
+            share_key: 'birth_cert_enc',
             fields: [
-                { label: 'Name', value: '{{ user.full_name | upper }}' },
-                { label: 'Date of Birth', value: '{{ user.mykad_number[0:2] }}-{{ user.mykad_number[2:4] }}-{{ user.mykad_number[4:6] }}' },
-                { label: 'Place of Birth', value: 'KUALA LUMPUR' }
+                { label: 'Name', value: (certData.name || '').toUpperCase() },
+                { label: 'ID No.', value: '{{ user.mykad_number }}' },
+                { label: 'Date of Birth', value: certData.dob || '' },
+                { label: 'Place of Birth', value: certData.pob || '' },
+                { label: 'Address', value: certData.address || '' },
+                { label: 'Father', value: certData.father || '' },
+                { label: 'Mother', value: certData.mother || '' }
             ]
         },
         'water_bill': {
@@ -512,11 +518,30 @@
                 `;
         });
 
-        html += `
+        // VERIFICATION BUTTON LOGIC
+        // Only show "Verified" immediately for non-birth-cert items or if we want to fake it.
+        // For Birth Cert (L1+L2), we require manual check.
+        if (key === 'birth_certificate') {
+            html += `
+                <div id="verify-section" style="text-align: center; margin-top: 15px;">
+                    <button id="check-validity-btn" onclick="verifyDocument()" 
+                        style="background: #eef2ff; color: var(--gov-blue); border: 1px solid var(--gov-blue); 
+                               padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer;">
+                        <i class="fas fa-shield-alt"></i> Check Validity
+                    </button>
+                    <div id="loading-spinner" style="display:none; color: #666; font-size: 12px; margin-top:5px;">
+                        <i class="fas fa-spinner fa-spin"></i> Verifying signatures...
+                    </div>
+                </div>
+            `;
+        } else {
+            // Default for others (Visual only)
+            html += `
                 <div style="text-align: center;">
                     <div class="verify-badge"><i class="fas fa-check-circle"></i> OFFICIALLY VERIFIED</div>
                 </div>
             `;
+        }
 
         html += `</div>`;
 
@@ -541,6 +566,46 @@
             window.location.href = "{{ url_for('share') }}?preselect_doc=" + data.share_key;
         } else {
             alert("This document cannot be shared via Capsule yet.");
+        }
+    }
+
+    // NEW: Verification Handler
+    async function verifyDocument() {
+        const btn = document.getElementById('check-validity-btn');
+        const spinner = document.getElementById('loading-spinner');
+        const container = document.getElementById('verify-section');
+
+        if (btn) btn.style.display = 'none';
+        if (spinner) spinner.style.display = 'block';
+
+        // Slight artificial delay for UX (feeling of "Checking")
+        await new Promise(r => setTimeout(r, 800));
+
+        try {
+            const response = await fetch('/verify-document?type=' + currentViewKey);
+            const result = await response.json();
+
+            if (result.valid) {
+                container.innerHTML = `
+                    <div class="verify-badge" style="animation: popIn 0.3s ease-out;">
+                        <i class="fas fa-check-circle"></i> VERIFIED (L1 & L2 SECURED)
+                    </div>
+                    <p style="font-size: 10px; color: green; margin-top: 5px;">
+                        <i class="fas fa-link"></i> Merkle Anchor Confirmed<br>
+                        <i class="fas fa-pen-nib"></i> Issuer Signature Valid
+                    </p>
+                 `;
+            } else {
+                container.innerHTML = `
+                    <div style="color: red; font-weight: bold; margin-top: 10px;">
+                        <i class="fas fa-times-circle"></i> VERIFICATION FAILED
+                    </div>
+                    <p style="font-size: 11px; color: #666;">${result.message}</p>
+                 `;
+            }
+        } catch (e) {
+            console.error(e);
+            container.innerHTML = `<span style="color:red">System Error</span>`;
         }
     }
 

@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+
+{% block title %}JPN Issuer Portal | VerifyX{% endblock %}
+
+{% block styles %}
+<style>
+    .split-layout {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 30px;
+    }
+
+    .panel {
+        background: white;
+        border-radius: 12px;
+        padding: 25px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    .citizen-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+
+    .citizen-table th,
+    .citizen-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #eee;
+    }
+
+    .citizen-table th {
+        background-color: #f8fafc;
+        color: #64748b;
+        font-weight: 600;
+        font-size: 14px;
+    }
+
+    .issue-btn {
+        background-color: var(--gov-blue);
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background 0.2s;
+    }
+
+    .issue-btn:hover {
+        background-color: #002244;
+    }
+
+    .log-item {
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .log-item:last-child {
+        border-bottom: none;
+    }
+
+    .log-status {
+        font-size: 11px;
+        font-weight: bold;
+        color: var(--success);
+        background: #ecfdf5;
+        padding: 2px 8px;
+        border-radius: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <h1 style="color: var(--gov-blue);">JPN Issuer Portal</h1>
+        <p style="color: #666;">Issue Layer 1 & 2 Secured Certificates</p>
+    </div>
+    <div
+        style="background: #eef2ff; padding: 10px 20px; border-radius: 8px; color: var(--gov-blue); font-weight: bold;">
+        <i class="fas fa-user-shield"></i> LOGGED IN AS: MOCK JPN
+    </div>
+</div>
+
+<div class="split-layout">
+    <!-- LEFT: ISSUANCE -->
+    <div class="panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div>
+                <h3><i class="fas fa-users"></i> Citizen Registry</h3>
+                <p style="font-size: 13px; color: #888;">Select citizens to manually or bulk issue certificates.</p>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <div style="position: relative;">
+                    <i class="fas fa-search" style="position: absolute; left: 10px; top: 10px; color: #aaa;"></i>
+                    <input type="text" id="search-input" onkeyup="filterCitizens()" placeholder="Search Name or IC..."
+                        style="padding: 8px 8px 8px 35px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; width: 200px;">
+                </div>
+                <button id="bulk-btn" onclick="issueBulk()" class="issue-btn"
+                    style="background-color: var(--gov-gold); color: #000; font-weight: bold; display: none;">
+                    <i class="fas fa-layers-group"></i> Issue Selected
+                </button>
+            </div>
+        </div>
+
+        <table class="citizen-table">
+            <thead>
+                <tr>
+                    <th style="width: 40px; text-align: center;"><input type="checkbox" id="select-all"
+                            onclick="toggleAll(this)"></th>
+                    <th>Full Name</th>
+                    <th>MyKad Number</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in citizens %}
+                <tr>
+                    <td style="text-align: center;">
+                        {% if not (c.birth_cert_enc and '{' in c.birth_cert_enc) %}
+                        <input type="checkbox" class="citizen-checkbox" value="{{ c.mykad_number }}"
+                            onclick="updateBulkBtn()">
+                        {% endif %}
+                    </td>
+                    <td>{{ c.full_name }}</td>
+                    <td>{{ c.mykad_number }}</td>
+                    <td><span style="color: green;">Active</span></td>
+                    <td style="display: flex; gap: 5px;">
+                        <!-- Heuristic: New system stores JSON (containing '{'), old system stored Fernet string -->
+                        {% if c.birth_cert_enc and '{' in c.birth_cert_enc %}
+                        <button class="issue-btn" style="background-color: #64748b; cursor: default;" disabled>
+                            <i class="fas fa-check"></i> Issued
+                        </button>
+                        {% else %}
+                        <button class="issue-btn" onclick="issueCert('{{ c.mykad_number }}', '{{ c.full_name }}')">
+                            <i class="fas fa-certificate"></i> Issue
+                        </button>
+                        {% endif %}
+
+                        <a href="/issuer/edit/{{ c.mykad_number }}" class="issue-btn"
+                            style="background-color: #007a76; text-decoration: none;">
+                            <i class="fas fa-edit"></i> Edit
+                        </a>
+                        <button class="issue-btn" onclick="showHistory('{{ c.mykad_number }}')"
+                            style="background-color: #3a7aa2;">
+                            <i class="fas fa-history"></i> History
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div style="margin-top: 15px; text-align: center;">
+            <a href="/issuer/logs"
+                style="color: var(--gov-blue); text-decoration: none; font-weight: 600; font-size: 13px;">
+                View Full Audit Logs <i class="fas fa-arrow-right"></i>
+            </a>
+        </div>
+    </div>
+
+    <!-- HISTORY MODAL -->
+    <div id="historyModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 600px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="color: var(--gov-blue); margin: 0;"><i class="fas fa-history"></i> Audit Trail</h2>
+                <button onclick="closeHistory()"
+                    style="background: none; border: none; font-size: 20px; cursor: pointer;">&times;</button>
+            </div>
+            <div id="history-loading" style="text-align: center; padding: 20px;">
+                <i class="fas fa-spinner fa-spin"></i> Loading records...
+            </div>
+            <div id="history-timeline" style="max-height: 400px; overflow-y: auto; display: none;">
+                <!-- Timeline items injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: LOGS -->
+    <div class="panel">
+        <h3><i class="fas fa-history"></i> Recent Issuances</h3>
+        <div style="margin-top: 20px;">
+            {% for log in logs %}
+            <div class="log-item">
+                <div>
+                    <div style="font-weight: 600; font-size: 13px;">{{ log.mykad_number }}</div>
+                    <div style="font-size: 11px; color: #999;">{{ log.timestamp }}</div>
+                </div>
+                <div class="log-status">{{ log.status }}</div>
+            </div>
+            {% else %}
+            <p style="color: #999; font-style: italic;">No recent issuances.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Simple Toast Notification Script -->
+<script>
+    async function issueCert(mykad, name) {
+        if (!confirm(`Issue Birth Certificate to ${name} (${mykad})?`)) return;
+
+        try {
+            const formData = new FormData();
+            formData.append('mykad', mykad);
+
+            const response = await fetch('/issuer/issue', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                alert("SUCCESS: " + result.message);
+                location.reload();
+            } else {
+                alert("ERROR: " + result.message);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("System Error");
+        }
+    }
+
+    // --- BULK ACTION SCRIPTS ---
+    function toggleAll(source) {
+        const checkboxes = document.querySelectorAll('.citizen-checkbox');
+        checkboxes.forEach(cb => cb.checked = source.checked);
+        updateBulkBtn();
+    }
+
+    function updateBulkBtn() {
+        const checked = document.querySelectorAll('.citizen-checkbox:checked').length;
+        const btn = document.getElementById('bulk-btn');
+        if (checked > 0) {
+            btn.style.display = 'block';
+            btn.innerHTML = `<i class="fas fa-layer-group"></i> Issue Selected (${checked})`;
+        } else {
+            btn.style.display = 'none';
+        }
+    }
+
+    async function issueBulk() {
+        const checkedBoxes = document.querySelectorAll('.citizen-checkbox:checked');
+        const mykads = Array.from(checkedBoxes).map(cb => cb.value);
+
+        if (mykads.length === 0) return;
+
+        if (!confirm(`Confirm issuing certificates for ${mykads.length} citizens?`)) return;
+
+        const btn = document.getElementById('bulk-btn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+        btn.disabled = true;
+
+        try {
+            const response = await fetch('/issuer/issue-bulk', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ mykads: mykads })
+            });
+
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                // Show partial errors if any
+                if (result.errors && result.errors.length > 0) {
+                    alert("Partially Successful: " + result.message + "\nErrors:\n" + result.errors.join("\n"));
+                } else {
+                    alert("SUCCESS: " + result.message);
+                }
+                location.reload();
+            } else {
+                alert("FAILED: " + result.message);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+
+        } catch (e) {
+            console.error(e);
+            alert("System Error");
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+    // --- SEARCH FILTER ---
+    function filterCitizens() {
+        const input = document.getElementById('search-input');
+        const filter = input.value.toUpperCase();
+        const table = document.querySelector('.citizen-table');
+        const tr = table.getElementsByTagName('tr');
+
+        // Loop through all table rows, and hide those who don't match the search query
+        for (let i = 1; i < tr.length; i++) { // Start from 1 to skip header
+            const tdName = tr[i].getElementsByTagName('td')[1]; // Name column
+            const tdIC = tr[i].getElementsByTagName('td')[2];   // IC column
+
+            if (tdName || tdIC) {
+                const txtName = tdName.textContent || tdName.innerText;
+                const txtIC = tdIC.textContent || tdIC.innerText;
+
+                if (txtName.toUpperCase().indexOf(filter) > -1 || txtIC.toUpperCase().indexOf(filter) > -1) {
+                    tr[i].style.display = "";
+                } else {
+                    tr[i].style.display = "none";
+                }
+            }
+        }
+    }
+
+    // --- HISTORY MODAL ---
+    const historyModal = document.getElementById('historyModal');
+
+    async function showHistory(mykad) {
+        historyModal.style.display = 'flex';
+        document.getElementById('history-loading').style.display = 'block';
+        const container = document.getElementById('history-timeline');
+        container.style.display = 'none';
+        container.innerHTML = '';
+
+        try {
+            const response = await fetch('/issuer/api/history/' + mykad);
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                if (result.history.length === 0) {
+                    container.innerHTML = '<p style="text-align:center; color:#888;">No history found.</p>';
+                } else {
+                    let html = '<div style="display: flex; flex-direction: column; gap: 15px;">';
+                    result.history.forEach(item => {
+                        html += `
+                            <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid var(--gov-blue);">
+                                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #64748b; margin-bottom: 5px;">
+                                    <span>${item.timestamp}</span>
+                                    <span style="font-weight: bold; color: ${item.status === 'SUCCESS' ? 'green' : 'red'}">${item.status}</span>
+                                </div>
+                                <div style="font-weight: bold; color: #334155;">${item.action}</div>
+                                <div style="font-size: 13px; color: #475569;">${item.context}</div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    container.innerHTML = html;
+                }
+            } else {
+                container.innerHTML = '<p style="color:red">Failed to load history.</p>';
+            }
+        } catch (e) {
+            console.error(e);
+            container.innerHTML = '<p style="color:red">System Error</p>';
+        } finally {
+            document.getElementById('history-loading').style.display = 'none';
+            container.style.display = 'block';
+        }
+    }
+
+    function closeHistory() {
+        historyModal.style.display = 'none';
+    }
+
+    // Close on outside click
+    window.onclick = function (event) {
+        if (event.target == historyModal) {
+            closeHistory();
+        }
+    }
+</script>
+
+{% endblock %}

@@ -269,12 +269,24 @@
 
         <ul class="nav-links">
             <li class="nav-item">
+                {% if session.get('is_issuer') %}
+                <a href="/issuer/dashboard"
+                    class="nav-link {% if request.path == '/issuer/dashboard' %}active{% endif %}">
+                    <i class="fas fa-tachometer-alt"></i> Issuer Dashboard
+                </a>
+                <a href="/issuer/logs" class="nav-link {% if request.path == '/issuer/logs' %}active{% endif %}">
+                    <i class="fas fa-list-alt"></i> Global Logs
+                </a>
+                {% else %}
                 <a href="{{ url_for('dashboard') }}"
                     class="nav-link {% if request.endpoint == 'dashboard' or request.endpoint == 'index' %}active{% endif %}">
                     <i class="fas fa-th-large"></i>
                     Dashboard
                 </a>
+                {% endif %}
             </li>
+
+            {% if not session.get('is_issuer') %}
             <li class="nav-item">
                 <a href="{{ url_for('my_files_entry') }}"
                     class="nav-link {% if request.endpoint == 'my_files_entry' %}active{% endif %}">
@@ -309,6 +321,7 @@
                     Settings
                 </a>
             </li>
+            {% endif %}
         </ul>
 
         <div class="logout-area">
