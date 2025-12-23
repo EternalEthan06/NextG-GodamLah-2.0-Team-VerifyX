@@ -16,9 +16,6 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from PIL import Image
 import io
-import numpy as np
-
-import numpy as np
 import pickle
 import time
 import random
@@ -1263,6 +1260,56 @@ def revoke_access(log_id):
 
 # --- SHARE CAPSULE LOGIC ---
 
+@app.route('/receive_capsule')
+def receive_capsule():
+    """
+    Public page for recipients to enter the code.
+    """
+    # Attempt to get logged-in user, else Guest
+    user_context = {'full_name': 'Guest', 'mykad_number': '-'}
+    if session.get('vault_access_granted'):
+        u, _ = get_user_context()
+        if u: user_context = u
+            
+    return render_template('receive_capsule.html', user=user_context)
+
+@app.route('/redeem_share', methods=['POST'])
+def redeem_share():
+    """
+    Validates the share code/OTP and grants guest access.
+    """
+    share_code = request.form.get('share_code')
+    sender_id_input = request.form.get('sender_id')
+    
+    if not share_code or not sender_id_input:
+         return jsonify({'status': 'failure', 'message': 'Missing credentials'})
+         
+    conn = get_db_connection()
+    
+    # Match MyKad + OTP + Status=ACTIVE
+    share = conn.execute('SELECT * FROM share_sessions WHERE sender_mykad = ? AND otp_code = ? AND status = "ACTIVE"', (sender_id_input, share_code)).fetchone()
+    
+    if not share:
+        conn.close()
+        return jsonify({'status': 'failure', 'message': 'Invalid credentials or session expired.'})
+        
+    sender = conn.execute('SELECT full_name FROM citizens WHERE mykad_number = ?', (share['sender_mykad'],)).fetchone()
+    conn.close()
+    
+    # Grant Guest Access
+    session['guest_access'] = True
+    session['guest_share_id'] = share['id']
+    session['guest_sender_id'] = share['sender_mykad']
+    session['guest_sender_name'] = sender['full_name']
+    
+    log_action(share['sender_mykad'], "SHARE ACCESS", f"Guest accessed Share:{share['id']}", "System", "SUCCESS")
+    
+    return jsonify({
+        'status': 'success', 
+        'sender_name': sender['full_name'],
+        'sender_id': share['sender_mykad']
+    })
+
 @app.route('/create_share', methods=['POST'])
 def create_share():
     """
@@ -1401,61 +1448,7 @@ def share_status(share_id):
         'expires_in': 3600 # Mock
     })
 
-@app.route('/receive_capsule')
-def receive_capsule():
-    """
-    Public page for recipients to enter the code.
-    """
-    # Attempt to get logged-in user, else Guest
-    user_context = {'full_name': 'Guest', 'mykad_number': '-'}
-    if session.get('vault_access_granted'):
-        u, _ = get_user_context()
-        if u: user_context = u
-            
-    return render_template('receive_capsule.html', user=user_context)
 
-@app.route('/redeem_share', methods=['POST'])
-def redeem_share():
-    """
-    Validates the 6-digit code and shows the documents.
-    """
-    share_code = request.form.get('share_code')
-    input_sender_id = request.form.get('sender_id') # New input
-    
-    conn = get_db_connection()
-    # Find session by OTP Code AND status ACTIVE
-    session_row = conn.execute('SELECT * FROM share_sessions WHERE otp_code = ? AND status = ?', (share_code, 'ACTIVE')).fetchone()
-    
-    if not session_row:
-        conn.close()
-        return jsonify({'status': 'error', 'message': 'Invalid or expired code.'})
-        
-    # Validation: Check if input_sender_id matches actual sender
-    actual_sender_id = session_row['sender_mykad']
-    if input_sender_id and input_sender_id.strip() != actual_sender_id:
-         conn.close()
-         return jsonify({'status': 'error', 'message': 'Sender ID does not match the code provided.'})
-
-    # Verify Sender Exists in DB (Data Integrity Check)
-    sender = conn.execute('SELECT full_name, mykad_number FROM citizens WHERE mykad_number = ?', (actual_sender_id,)).fetchone()
-    if not sender:
-        conn.close()
-        return jsonify({'status': 'error', 'message': 'Sender account no longer exists.'})
-    conn.close()
-    
-    # Return success and maybe the preview HTML directly or JSON payload
-    # In a real flow, we would set a session token for the guest and redirect them.
-    # For this demo, we can grant a temporary session variable.
-    session['guest_access'] = True
-    session['guest_sender_name'] = sender['full_name']
-    session['guest_sender_id'] = sender['mykad_number']
-    session['guest_share_id'] = session_row['id'] # Store ID for retrieval
-    
-    return jsonify({
-        'status': 'success',
-        'sender_name': sender['full_name'],
-        'sender_id': sender['mykad_number']
-    })
 
 @app.route('/view_capsule_content')
 def view_capsule_content():
@@ -1497,13 +1490,7 @@ def view_capsule_content():
     return render_template('view_capsule.html', user=sender, allowed_docs=allowed_docs, session_otp=session_otp, share_id=share_id)
 
 
-@app.route('/logout', methods=['GET', 'POST'])
-def logout():
-    """
-    Logs out the current user by clearing all session data.
-    """
-    session.clear()
-    return redirect(url_for('login'))
+
 
 
 # --- SECURED PDF DOWNLOAD ROUTE ---
@@ -1647,6 +1634,16 @@ def revoke_share(share_id):
     log_action(mykad, "REVOKE", f"Revoked Share ID {share_id}", "System", "SUCCESS")
     
     return jsonify({'status': 'success', 'message': 'Access revoked successfully.'})
+
+@app.route('/logout')
+def logout():
+    """
+    Logs out the user by clearing the session.
+    """
+    session.clear()
+    return redirect(url_for('login'))
+
+
 
 if __name__ == '__main__':
     print("-------------------------------------------------------")

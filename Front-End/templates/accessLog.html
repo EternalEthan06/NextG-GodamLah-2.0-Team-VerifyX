@@ -108,6 +108,18 @@
         background-color: #fcfcfc;
     }
 
+    /* SAFE SCROLLING FOR TABLES */
+    .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+        min-width: 600px;
+        /* Ensure table doesn't collapse too much */
+    }
+
     /* COLUMNS */
     .org-cell {
         display: flex;
@@ -306,6 +318,45 @@
     .hidden-log {
         display: none;
     }
+
+    /* --- RESPONSIVE ADJUSTMENTS --- */
+    @media (max-width: 768px) {
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .logs-tabs {
+            flex-direction: column;
+            /* Stack tabs on very small screens, or scroll? Stacking is safer */
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            width: 100%;
+            text-align: left;
+            padding: 10px;
+        }
+
+        /* Disable hover underline effect for full width block mobile buttons, use background highlight instead */
+        .tab-btn.active::after {
+            display: none;
+        }
+
+        .tab-btn.active {
+            background: #eef5fc;
+            border-radius: 6px;
+        }
+
+        /* Table responsiveness is now global */
+
+        .btn-action {
+            margin-right: 5px;
+            padding: 6px 12px;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -342,152 +393,161 @@
         style="text-align: center; padding: 60px; color: #94a3b8; background: white; border-radius: 12px; border: 1px dashed #cbd5e1;">
         <i class="fas fa-folder-open" style="font-size: 32px; margin-bottom: 10px; opacity: 0.5;"></i>
         <p>No active share capsules found.</p>
-        <a href="{{ url_for('share_capsule') }}"
+        <a href="{{ url_for('share') }}"
             style="display: inline-block; margin-top: 10px; color: var(--gov-blue); font-weight: 600; text-decoration: none;">Create
             New Share &rarr;</a>
     </div>
     {% else %}
     <div class="table-card">
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 25%;">Recipient</th>
-                    <th style="width: 20%;">Pass Code (OTP)</th>
-                    <th style="width: 20%;">Expires At</th>
-                    <th style="width: 15%;">Status</th>
-                    <th style="width: 20%;">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for share in active_shares %}
-                <tr>
-                    <td>
-                        <div class="org-cell">
-                            <div class="org-icon" style="background: #f0fdf4; color: #16a34a;">
-                                <i class="fas fa-share-nodes"></i>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">Recipient</th>
+                        <th style="width: 20%;">Pass Code (OTP)</th>
+                        <th style="width: 20%;">Expires At</th>
+                        <th style="width: 15%;">Status</th>
+                        <th style="width: 20%;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for share in active_shares %}
+                    <tr>
+                        <td>
+                            <div class="org-cell">
+                                <div class="org-icon" style="background: #f0fdf4; color: #16a34a;">
+                                    <i class="fas fa-share-nodes"></i>
+                                </div>
+                                <div>
+                                    <span class="org-name">{{ share.recipient_type }}</span>
+                                    <span class="access-id">{{ share.recipient_id }}</span>
+                                </div>
                             </div>
-                            <div>
-                                <span class="org-name">{{ share.recipient_type }}</span>
-                                <span class="access-id">{{ share.recipient_id }}</span>
+                        </td>
+                        <td
+                            style="font-family: monospace; font-size: 14px; font-weight: 700; color: #334155; letter-spacing: 1px;">
+                            {{ share.otp_code }}
+                        </td>
+                        <td style="color: #64748b; font-size: 13px;">{{ share.expires_at }}</td>
+                        <td>
+                            <span class="status-badge status-active">Active</span>
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 20px; align-items: center;">
+                                <button class="btn-action btn-history" onclick="filterLogsByShare('{{ share.id }}')"
+                                    style="margin-right: 0;">
+                                    <i class="fas fa-history"></i> History
+                                </button>
+                                <button class="btn-action btn-revoke" onclick="revokeShare('{{ share.id }}', this)"
+                                    style="margin-right: 0;">
+                                    <i class="fas fa-ban"></i> Revoke
+                                </button>
                             </div>
-                        </div>
-                    </td>
-                    <td
-                        style="font-family: monospace; font-size: 14px; font-weight: 700; color: #334155; letter-spacing: 1px;">
-                        {{ share.otp_code }}
-                    </td>
-                    <td style="color: #64748b; font-size: 13px;">{{ share.expires_at }}</td>
-                    <td>
-                        <span class="status-badge status-active">Active</span>
-                    </td>
-                    <td>
-                        <div style="display: flex; gap: 20px; align-items: center;">
-                            <button class="btn-action btn-history" onclick="filterLogsByShare('{{ share.id }}')"
-                                style="margin-right: 0;">
-                                <i class="fas fa-history"></i> History
-                            </button>
-                            <button class="btn-action btn-revoke" onclick="revokeShare('{{ share.id }}', this)"
-                                style="margin-right: 0;">
-                                <i class="fas fa-ban"></i> Revoke
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div><!-- /.table-responsive -->
+</div>
+{% endif %}
 </div>
 
 <!-- PANEL 2: AUDIT LOGS -->
 <div id="tab-audit" class="tab-panel">
     <div class="table-card">
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 25%;">Organization</th>
-                    <th style="width: 35%;">Permissions & Context</th>
-                    <th style="width: 15%;">Access Time</th>
-                    <th style="width: 10%;">Status</th>
-                    <th style="width: 15%;">Action</th>
-                </tr>
-            </thead>
-            <tbody id="audit-log-body">
-                {% for log in logs %}
-                <tr class="log-row {% if loop.index > 10 %}hidden-log{% endif %}" data-context="{{ log.context }}" {% if
-                    log.status=='FAILED' or log.status=='BLOCKED' %}style="background-color: #fff1f2;" {% endif %}>
-                    <td>
-                        <div class="org-cell">
-                            <div class="org-icon">
-                                {% if log.organization_name == 'System' %}
-                                <i class="fas fa-desktop"></i>
-                                {% elif 'Bank' in log.organization_name %}
-                                <i class="fas fa-university"></i>
-                                {% elif 'Rental' in log.organization_name %}
-                                <i class="fas fa-home"></i>
-                                {% elif 'Touch' in log.organization_name %}
-                                <i class="fas fa-wallet"></i>
-                                {% elif 'LHDN' in log.organization_name %}
-                                <i class="fas fa-building-columns"></i>
-                                {% else %}
-                                <i class="fas fa-link"></i>
-                                {% endif %}
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">Organization</th>
+                        <th style="width: 35%;">Permissions & Context</th>
+                        <th style="width: 15%;">Access Time</th>
+                        <th style="width: 10%;">Status</th>
+                        <th style="width: 15%;">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="audit-log-body">
+                    {% for log in logs %}
+                    <tr class="log-row {% if loop.index > 10 %}hidden-log{% endif %}" data-context="{{ log.context }}"
+                        {% if log.status=='FAILED' or log.status=='BLOCKED' %}style="background-color: #fff1f2;" {%
+                        endif %}>
+                        <td>
+                            <div class="org-cell">
+                                <div class="org-icon">
+                                    {% if log.organization_name == 'System' %}
+                                    <i class="fas fa-desktop"></i>
+                                    {% elif 'Bank' in log.organization_name %}
+                                    <i class="fas fa-university"></i>
+                                    {% elif 'Rental' in log.organization_name %}
+                                    <i class="fas fa-home"></i>
+                                    {% elif 'Touch' in log.organization_name %}
+                                    <i class="fas fa-wallet"></i>
+                                    {% elif 'LHDN' in log.organization_name %}
+                                    <i class="fas fa-building-columns"></i>
+                                    {% else %}
+                                    <i class="fas fa-link"></i>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <span class="org-name">{{ log.organization_name }}</span>
+                                    <span class="access-id">Log ID: #{{ log.id }} ({{ log.action }})</span>
+                                </div>
                             </div>
-                            <div>
-                                <span class="org-name">{{ log.organization_name }}</span>
-                                <span class="access-id">Log ID: #{{ log.id }} ({{ log.action }})</span>
+                        </td>
+                        <td>
+                            <span class="perm-tag">
+                                {% if 'login' in log.action|lower %}<i class="fas fa-sign-in-alt"></i>
+                                {% elif 'share' in log.action|lower %}<i class="fas fa-user-check"></i>
+                                {% elif 'view' in log.action|lower %}<i class="fas fa-eye"></i>
+                                {% elif 'download' in log.action|lower %}<i class="fas fa-download"></i>
+                                {% else %}<i class="fas fa-tag"></i>{% endif %}
+                                {{ log.context }}
+                            </span>
+                            <div style="font-size: 11px; color: #64748b; margin-top: 5px;">
+                                Record Status: {{ log.status }}
                             </div>
-                        </div>
-                    </td>
-                    <td>
-                        <span class="perm-tag">
-                            {% if 'login' in log.action|lower %}<i class="fas fa-sign-in-alt"></i>
-                            {% elif 'share' in log.action|lower %}<i class="fas fa-user-check"></i>
-                            {% elif 'view' in log.action|lower %}<i class="fas fa-eye"></i>
-                            {% elif 'download' in log.action|lower %}<i class="fas fa-download"></i>
-                            {% else %}<i class="fas fa-tag"></i>{% endif %}
-                            {{ log.context }}
-                        </span>
-                        <div style="font-size: 11px; color: #64748b; margin-top: 5px;">
-                            Record Status: {{ log.status }}
-                        </div>
-                    </td>
-                    <td style="color: #475569; font-size: 13px; font-weight: 500;">{{ log.timestamp }}</td>
-                    <td>
-                        {% if log.status == 'ACTIVE' %}
-                        <span class="status-badge status-active"><i class="fas fa-circle" style="font-size: 6px;"></i>
-                            Active</span>
-                        {% elif log.status == 'REVOKED' or log.status == 'BLOCKED' or log.status == 'FAILED' %}
-                        <span class="status-badge status-revoked"><i class="fas fa-ban"></i> {{ log.status|upper
-                            }}</span>
-                        {% else %}
-                        <span class="status-badge status-success">{{ log.status|upper }}</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if log.status == 'ACTIVE' %}
-                        <button class="btn-action btn-revoke" data-log-id="{{ log.id }}" onclick="revokeAccess(this)">
-                            <i class="fas fa-power-off"></i> Revoke
-                        </button>
-                        {% else %}
-                        <span style="font-size:11px; color:#aaa;">Archived</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                        </td>
+                        <td style="color: #475569; font-size: 13px; font-weight: 500;">{{ log.timestamp }}</td>
+                        <td>
+                            {% if log.status == 'ACTIVE' %}
+                            <span class="status-badge status-active"><i class="fas fa-circle"
+                                    style="font-size: 6px;"></i>
+                                Active</span>
+                            {% elif log.status == 'REVOKED' or log.status == 'BLOCKED' or log.status == 'FAILED' %}
+                            <span class="status-badge status-revoked"><i class="fas fa-ban"></i> {{ log.status|upper
+                                }}</span>
+                            {% else %}
+                            <span class="status-badge status-success">{{ log.status|upper }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if log.status == 'ACTIVE' %}
+                            <button class="btn-action btn-revoke" data-log-id="{{ log.id }}"
+                                onclick="revokeAccess(this)">
+                                <i class="fas fa-power-off"></i> Revoke
+                            </button>
+                            {% else %}
+                            <span style="font-size:11px; color:#aaa;">Archived</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
 
-        {% if logs|length > 10 %}
-        <div style="text-align: center; padding: 15px; border-top: 1px solid #f1f5f9;">
-            <button id="show-more-btn" onclick="showMoreLogs()"
-                style="border:none; background:transparent; color:#64748b; font-size:13px; cursor:pointer; font-weight:600;">
-                <i class="fas fa-chevron-down"></i> Show Previous History
-            </button>
+            {% if logs|length > 10 %}
+            <div style="text-align: center; padding: 15px; border-top: 1px solid #f1f5f9;">
+                <button id="show-more-btn" onclick="showMoreLogs()"
+                    style="border:none; background:transparent; color:#64748b; font-size:13px; cursor:pointer; font-weight:600;">
+                    <i class="fas fa-chevron-down"></i> Show Previous History
+                </button>
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
-    </div>
+    </div><!-- /.table-responsive -->
+</div>
 </div>
 
 <div id="toast"></div>

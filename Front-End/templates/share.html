@@ -9,7 +9,9 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 100vh;
+        min-height: 100vh;
+        /* Changed from height:100vh */
+        height: auto;
     }
 
     .container {
@@ -20,7 +22,23 @@
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
         overflow: hidden;
         display: flex;
-        height: 750px;
+        min-height: 750px;
+        /* Changed from height:750px */
+        height: auto;
+        flex-direction: row;
+        /* Default row */
+    }
+
+    @media (max-width: 1024px) {
+        .container {
+            flex-direction: column;
+            /* Stack on smaller screens */
+        }
+
+        .form-panel {
+            border-right: none;
+            border-bottom: 1px solid #eee;
+        }
     }
 
     /* --- LEFT PANEL: FORM --- */

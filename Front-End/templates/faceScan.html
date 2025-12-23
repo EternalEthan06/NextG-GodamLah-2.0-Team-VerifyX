@@ -44,9 +44,12 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
-            overflow: hidden;
+            overflow-x: hidden;
+            /* Prevent horizontal scroll only */
+            padding: 20px;
+            /* Add some padding for small screens */
         }
 
         .security-container {
