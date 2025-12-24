@@ -236,11 +236,27 @@
         z-index: 0;
         user-select: none;
     }
+
+    /* GPU ACCELERATION FOR INSTANT HIDING */
+    #capsule-content-area {
+        will-change: opacity, filter;
+        backface-visibility: hidden;
+        transform: translateZ(0);
+        /* Force GPU Layer */
+        transition: none !important;
+        /* No fading, just off */
+    }
+
+    /* INSTANT BLUR CLASS */
+    .blurred-content {
+        filter: blur(30px) !important;
+        opacity: 0.5 !important;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="container" id="capsule-content-area">
     <div class="list-panel">
         <div class="list-header">
             <h2>Shared Documents</h2>
@@ -255,7 +271,7 @@
         </div>
         <div class="doc-list">
             {% for doc_key in allowed_docs %}
-            <div class="doc-item" onclick="showPreview('{{doc_key}}', this)">
+            <div class="doc-item" onclick="selectDocument('{{doc_key}}', this)">
                 {% if doc_key == 'identity' %}<i class="fas fa-id-card"></i>
                 {% elif doc_key == 'license' %}<i class="fas fa-car"></i>
                 {% elif doc_key == 'income' %}<i class="fas fa-file-invoice-dollar"></i>
@@ -381,25 +397,98 @@
                 { label: 'Dose 1', value: 'PFIZER (BATCH FK001)' },
                 { label: 'Dose 2', value: 'PFIZER (BATCH FK055)' }
             ]
+        },
+        'epf': {
+            title: 'KWSP STATEMENT',
+            source: 'KUMPULAN WANG SIMPANAN PEKERJA',
+            icon: 'fa-file-invoice',
+            stamp: 'VERIFIED: KWSP',
+            color: '#1e40af',
+            fields: [
+                { label: 'Name', value: '{{ user.full_name | upper }}' },
+                { label: 'Account No', value: '{{ user.mykad_number }}00' },
+                { label: 'Employer', value: 'NEXTG TEAMS SDN BHD' },
+                { label: 'Balance', value: 'RM 124,450.00' }
+            ]
+        },
+        'transcript': {
+            title: 'ACADEMIC TRANSCRIPT',
+            source: 'MINISTRY OF HIGHER EDUCATION',
+            icon: 'fa-graduation-cap',
+            stamp: 'VERIFIED: MOHE',
+            color: '#7e22ce',
+            fields: [
+                { label: 'Name', value: '{{ user.full_name | upper }}' },
+                { label: 'Institution', value: 'UNIVERSITI MALAYA' },
+                { label: 'Program', value: 'BACHELOR OF COMPUTER SCIENCE' },
+                { label: 'CGPA', value: '3.85' }
+            ]
+        },
+        'birth': {
+            title: 'BIRTH CERTIFICATE',
+            source: 'JABATAN PENDAFTARAN NEGARA',
+            icon: 'fa-baby',
+            stamp: 'VERIFIED: JPN GOV',
+            color: '#ec4899',
+            fields: [
+                { label: 'Name', value: '{{ user.full_name | upper }}' },
+                { label: 'DOB', value: '{{ user.mykad_number[0:2] }}-{{ user.mykad_number[2:4] }}-{{ user.mykad_number[4:6] }}' },
+                { label: 'Place', value: 'KUALA LUMPUR' },
+                { label: 'Citizenship', value: 'WARGANEGARA' }
+            ]
+        },
+        'water': {
+            title: 'UTILITY BILL (WATER)',
+            source: 'PENGURUSAN AIR SELANGOR',
+            icon: 'fa-faucet',
+            stamp: 'VERIFIED: AIR SELANGOR',
+            color: '#0ea5e9',
+            fields: [
+                { label: 'Account Name', value: '{{ user.full_name | upper }}' },
+                { label: 'Account No', value: '200455611' },
+                { label: 'Bill Date', value: '01 DEC 2024' },
+                { label: 'Amount Due', value: 'RM 35.50' }
+            ]
+        },
+        'oku': {
+            title: 'OKU CARD',
+            source: 'JABATAN KEBAJIKAN MASYARAKAT',
+            icon: 'fa-wheelchair',
+            stamp: 'VERIFIED: JKM',
+            color: '#f59e0b',
+            fields: [
+                { label: 'Name', value: '{{ user.full_name | upper }}' },
+                { label: 'Card No', value: 'PH/10/8892' },
+                { label: 'Category', value: 'PHYSICAL' },
+                { label: 'Issue Date', value: '15 JAN 2020' }
+            ]
         }
     };
 
-    function showPreview(type, el) {
+    function selectDocument(type, el) {
+        // Highlight active item
         document.querySelectorAll('.doc-item').forEach(item => item.classList.remove('active'));
         if (el) el.classList.add('active');
 
         const item = docs[type];
+        if (!item) return; // Safety check
 
+        // Update Text
         document.getElementById('doc-title').innerText = item.title;
         document.getElementById('doc-source').innerText = item.source;
-        document.getElementById('stamp-box').innerHTML = `<i class="fas fa-check-circle"></i> ${item.stamp}`;
-        document.getElementById('stamp-box').style.color = item.color;
-        document.getElementById('stamp-box').style.borderColor = item.color;
 
+        // Update Stamp
+        const stamp = document.getElementById('stamp-box');
+        stamp.innerHTML = `<i class="fas fa-check-circle"></i> ${item.stamp}`;
+        stamp.style.color = item.color;
+        stamp.style.borderColor = item.color;
+
+        // Update Icon
         const icon = document.getElementById('auth-icon');
         icon.className = `fas ${item.icon} authority-logo`;
         icon.style.color = item.color;
 
+        // Update Fields
         const content = document.getElementById('doc-content');
         content.innerHTML = '';
 
@@ -413,72 +502,124 @@
         });
     }
 
+    // Auto-select the first document on load
     document.addEventListener('DOMContentLoaded', () => {
-        const defaultItem = document.querySelector('.doc-item.active');
-        showPreview('identity', defaultItem);
+        const firstItem = document.querySelector('.doc-item');
+        if (firstItem) {
+            firstItem.click(); // Triggers the onclick handler defined in HTML
+        } else {
+            // Fallback if no docs
+            console.warn("No documents found to preview.");
+        }
     });
 </script>
 
 <!-- SCREENSHOT DETERRENCE & SECURITY -->
-<div id="security-overlay"
-    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:999999; align-items:center; justify-content:center; flex-direction:column;">
-    <div style="font-size:50px; color:#ef4444;"><i class="fas fa-eye-slash"></i></div>
-    <h2 style="color:white; margin-top:20px;">Security Mode Active</h2>
-    <p style="color:#aaa; margin-bottom:30px;">Screenshot attempt or window switch detected.</p>
-    <button onclick="resumeSession()"
-        style="padding:10px 20px; background:white; color:black; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">Click
-        to Resume</button>
-</div>
+<!-- Removed static HTML overlay to prevent nesting issues. Injected via JS below. -->
 
 <script>
+    // PRE-INJECT OVERLAY
+    const overlayHTML = `
+    <div id="security-overlay" style="opacity:0; pointer-events:none; position:fixed; top:0; left:0; width:100%; height:100vh; background: #000000; z-index:2147483647; display:flex; align-items:center; justify-content:center; flex-direction:column; text-align:center; font-family: 'Inter', sans-serif; filter: none !important; -webkit-filter: none !important; will-change: opacity; transition: none;">
+        <div style="background: rgba(239, 68, 68, 0.1); padding: 30px; border-radius: 50%; border: 1px solid rgba(239, 68, 68, 0.2); margin-bottom: 25px;">
+            <i class="fas fa-shield-halved" style="font-size: 50px; color: #ef4444;"></i>
+        </div>
+        <h2 style="color:white; font-size: 24px; font-weight: 700; margin: 0 0 10px 0; letter-spacing: -0.5px;">Security Protocol Engaged</h2>
+        <p style="color:#94a3b8; font-size: 14px; margin: 0 0 30px 0; max-width: 400px; line-height: 1.5;">
+            A screenshot attempt or window switch was detected. The content has been temporarily hidden to protect sensitive personal data.
+        </p>
+        <button id="resume-btn" style="padding: 12px 30px; background: #3b82f6; color: white; border: none; border-radius: 99px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.5); display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-undo"></i> Resume Session
+        </button>
+    </div>`;
+
+    document.body.insertAdjacentHTML('afterbegin', overlayHTML);
+
     // AGGRESSIVE PROTECTION
     const overlay = document.getElementById('security-overlay');
+    const content = document.getElementById('capsule-content-area'); // Target by ID
+
+    // Bind click event after injection
+    document.getElementById('resume-btn').addEventListener('click', resumeSession);
 
     function activateSecurity() {
-        overlay.style.display = 'flex';
-        document.body.style.overflow = 'hidden'; // Lock scroll
+        // INSTANT BLUR + OPACITY
+        if (content) content.classList.add('blurred-content');
+
+        overlay.style.opacity = '1';
+        overlay.style.pointerEvents = 'auto'; // Re-enable clicking button
+        document.body.style.overflow = 'hidden';
     }
 
     function resumeSession() {
-        overlay.style.display = 'none';
-        document.body.style.filter = 'none';
+        overlay.style.opacity = '0';
+        overlay.style.pointerEvents = 'none';
+
+        if (content) content.classList.remove('blurred-content');
+        if (content) content.style.opacity = '1'; // Ensure it's visible
+
         document.body.style.overflow = 'auto';
     }
 
+    // 0. AGGRESSIVE POLLING (Failsafe for fast OS tools)
+    setInterval(() => {
+        if (!document.hasFocus()) {
+            if (document.hidden) activateSecurity();
+        }
+    }, 100);
+
     // 1. WINDOW FOCUS (Snipping Tool Click / Alt-Tab)
     window.addEventListener('blur', () => {
-        // Instant hide (No blur, straight to black)
+        // Instant blur before overlay
+        if (content) content.classList.add('blurred-content');
         activateSecurity();
         document.title = "Protected - Hidden";
     });
 
-    // 2. MOUSE LEAVE (Anticipate clicking outside)
-    document.addEventListener('mouseleave', () => {
-        document.body.style.filter = 'blur(10px)'; // Warning blur
-    });
-
-    document.addEventListener('mouseenter', () => {
-        if (overlay.style.display === 'none') {
-            document.body.style.filter = 'none';
+    // 1b. VISIBILITY CHANGE & RESIZE
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            if (content) content.classList.add('blurred-content');
+            activateSecurity();
         }
     });
 
+    window.addEventListener('resize', () => {
+        if (!document.hasFocus()) {
+            if (content) content.classList.add('blurred-content');
+            activateSecurity();
+        }
+    });
+
+    // 1c. DISABLE RIGHT CLICK
+    document.addEventListener('contextmenu', event => event.preventDefault());
+
+    // 2. MOUSE LEAVE (Anticipate clicking outside)
+    // REMOVED based on User Feedback: No blurring on mouse leave. 
+    // Only triggering Black Screen on actual threats (PrintScreen / Window Switch).
+
     // 3. KEYBOARD SHORTCUTS
     document.addEventListener('keydown', function (e) {
-        // Windows Snipping Shortcut (Win+Shift+S) - Detect WIN key
+        // META KEY (Windows Snipping Tool Trigger)
         if (e.key === 'Meta' || e.key === 'os') {
+            if (content) content.classList.add('blurred-content');
             activateSecurity();
         }
 
         // PrintScreen
         if (e.key === 'PrintScreen') {
+            // SYNC BLUR
+            if (content) content.classList.add('blurred-content');
             activateSecurity();
-            alert("Screenshots are prohibited!"); // Blocks checking standard queue?
+
+            // Try to overwrite clipboard
+            try { navigator.clipboard.writeText('Protected'); } catch (err) { }
         }
 
         // Ctrl+P / Ctrl+S / Ctrl+Shift+S
         if (e.ctrlKey && (['p', 's', 'S'].includes(e.key) || (e.shiftKey && ['s', 'S'].includes(e.key)))) {
             e.preventDefault();
+            if (content) content.classList.add('blurred-content');
             activateSecurity();
         }
     });

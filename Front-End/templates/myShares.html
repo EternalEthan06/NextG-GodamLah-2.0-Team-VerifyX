@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}My Managed Shares | VerifyX{% endblock %}
+
+{% block styles %}
+<style>
+    .page-header {
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+    }
+
+    .page-header h1 {
+        color: var(--gov-blue);
+        font-size: 28px;
+        margin-bottom: 5px;
+    }
+
+    .page-header p {
+        color: #666;
+        font-size: 14px;
+    }
+
+    .table-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+        border: 1px solid #e5e7eb;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 600px;
+    }
+
+    th {
+        background: #f8fafc;
+        text-align: left;
+        padding: 15px 25px;
+        font-size: 12px;
+        color: #64748b;
+        text-transform: uppercase;
+        font-weight: 700;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    td {
+        padding: 20px 25px;
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: middle;
+    }
+
+    tr:last-child td {
+        border-bottom: none;
+    }
+
+    tr:hover {
+        background-color: #fcfcfc;
+    }
+
+    .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* COLUMNS */
+    .org-cell {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .org-icon {
+        width: 40px;
+        height: 40px;
+        background: #eef5fc;
+        color: var(--gov-blue);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+    }
+
+    .org-name {
+        font-weight: 600;
+        color: #1e293b;
+        font-size: 15px;
+        display: block;
+    }
+
+    .access-id {
+        font-size: 11px;
+        color: #94a3b8;
+    }
+
+    .status-badge {
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        text-transform: uppercase;
+    }
+
+    .status-active {
+        background: #dcfce7;
+        color: #15803d;
+    }
+
+    .status-revoked {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .btn-action {
+        background: white;
+        border: 1px solid #e2e8f0;
+        color: #475569;
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        margin-right: 20px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .btn-action:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    .btn-history {
+        color: var(--gov-blue);
+        border-color: #bfdbfe;
+        background: linear-gradient(to bottom, #eff6ff, #dbeafe);
+        text-decoration: none;
+    }
+
+    .btn-history:hover {
+        border-color: var(--gov-blue);
+    }
+
+    .btn-revoke {
+        color: #dc2626;
+        border-color: #fecaca;
+        background: linear-gradient(to bottom, #fef2f2, #fee2e2);
+    }
+
+    .btn-revoke:hover {
+        border-color: #dc2626;
+    }
+
+    /* Toast Notification */
+    #toast {
+        visibility: hidden;
+        min-width: 250px;
+        background-color: #1e293b;
+        color: #fff;
+        text-align: center;
+        border-radius: 8px;
+        padding: 16px;
+        position: fixed;
+        z-index: 1000;
+        left: 50%;
+        bottom: 30px;
+        transform: translateX(-50%);
+        font-size: 14px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    #toast.show {
+        visibility: visible;
+        animation: fadein 0.5s, fadeout 0.5s 2.5s;
+    }
+
+    @keyframes fadein {
+        from {
+            bottom: 0;
+            opacity: 0;
+        }
+
+        to {
+            bottom: 30px;
+            opacity: 1;
+        }
+    }
+
+    @keyframes fadeout {
+        from {
+            bottom: 30px;
+            opacity: 1;
+        }
+
+        to {
+            bottom: 0;
+            opacity: 0;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .btn-action {
+            margin-right: 5px;
+            padding: 6px 12px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>My Managed Shares</h1>
+        <p>Control and revoke access for capsules you have shared.</p>
+    </div>
+    <div style="text-align: right;">
+        <a href="{{ url_for('share') }}"
+            style="background: var(--gov-blue); color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
+            <i class="fas fa-plus"></i> New Share
+        </a>
+    </div>
+</div>
+
+<!-- PANEL 1: MANAGED SHARES -->
+<div>
+    {% set active_shares = [] %}
+    {% for share in my_shares %}
+    {# We show ALL shares here, or maybe just active? The user usually wants to manage active ones. Let's show all but
+    highlight active. #}
+    {# Actually, previous logic only showed ACTIVE shares for management. Let's stick to that for now, or show all with
+    status. #}
+    {# Based on screenshot, they want list of shares. Let's show active ones first. #}
+    {% if share.status == 'ACTIVE' %}
+    {% set _ = active_shares.append(share) %}
+    {% endif %}
+    {% endfor %}
+
+    {% if not active_shares %}
+    <div
+        style="text-align: center; padding: 60px; color: #94a3b8; background: white; border-radius: 12px; border: 1px dashed #cbd5e1;">
+        <i class="fas fa-folder-open" style="font-size: 32px; margin-bottom: 10px; opacity: 0.5;"></i>
+        <p>No active share capsules found.</p>
+        <a href="{{ url_for('share') }}"
+            style="display: inline-block; margin-top: 10px; color: var(--gov-blue); font-weight: 600; text-decoration: none;">Create
+            New Share &rarr;</a>
+    </div>
+    {% else %}
+    <div class="table-card">
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">Recipient</th>
+                        <th style="width: 20%;">Pass Code (OTP)</th>
+                        <th style="width: 20%;">Expires At</th>
+                        <th style="width: 15%;">Status</th>
+                        <th style="width: 20%;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for share in active_shares %}
+                    <tr>
+                        <td>
+                            <div class="org-cell">
+                                <div class="org-icon" style="background: #f0fdf4; color: #16a34a;">
+                                    <i class="fas fa-share-nodes"></i>
+                                </div>
+                                <div>
+                                    <span class="org-name">{{ share.recipient_type }}</span>
+                                    <span class="access-id">{{ share.recipient_id }}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td
+                            style="font-family: monospace; font-size: 14px; font-weight: 700; color: #334155; letter-spacing: 1px;">
+                            {{ share.otp_code }}
+                        </td>
+                        <td style="color: #64748b; font-size: 13px;">{{ share.expires_at }}</td>
+                        <td>
+                            <span class="status-badge status-active">Active</span>
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 20px; align-items: center;">
+                                {# History button redirects to Access Logs with filter param #}
+                                <a href="{{ url_for('access_log', filter_share=share.id) }}"
+                                    class="btn-action btn-history" style="margin-right: 0;">
+                                    <i class="fas fa-history"></i> History
+                                </a>
+                                <button class="btn-action btn-revoke" onclick="revokeShare('{{ share.id }}', this)"
+                                    style="margin-right: 0;">
+                                    <i class="fas fa-ban"></i> Revoke
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div id="toast"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showToast(message) {
+        var x = document.getElementById("toast");
+        x.innerHTML = message;
+        x.className = "show";
+        setTimeout(function () { x.className = x.className.replace("show", ""); }, 3000);
+    }
+
+    function revokeShare(shareId, btn) {
+        if (!confirm("Are you sure you want to revoke this share? Recipient will effectively be blocked immediately.")) return;
+
+        fetch('/revoke_share/' + shareId, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast("Share Revoked Successfully");
+                    btn.closest('tr').querySelector('.status-badge').className = "status-badge status-revoked";
+                    btn.closest('tr').querySelector('.status-badge').innerText = "REVOKED";
+                    btn.remove();
+                } else {
+                    showToast("Error: " + data.message);
+                }
+            });
+    }
+</script>
+{% endblock %}

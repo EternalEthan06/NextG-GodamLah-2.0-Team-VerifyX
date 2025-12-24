@@ -272,6 +272,41 @@
             opacity: 0;
         }
     }
+
+    /* --- FANCY INPUT STYLING (From share.html) --- */
+    .fancy-input-group {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 5px;
+        transition: 0.2s;
+        display: flex;
+        align-items: center;
+    }
+
+    .fancy-input-group:focus-within {
+        border-color: var(--gov-blue);
+        box-shadow: 0 0 0 3px rgba(22, 59, 130, 0.1);
+        background: white;
+    }
+
+    .fancy-input-group i {
+        color: #94a3b8;
+        padding: 0 15px;
+        font-size: 16px;
+    }
+
+    .fancy-input-group input,
+    .fancy-input-group select {
+        border: none;
+        background: transparent;
+        padding: 12px 0;
+        font-size: 15px;
+        width: 100%;
+        outline: none;
+        color: #333;
+        font-weight: 500;
+    }
 </style>
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 {% endblock %}
@@ -287,9 +322,27 @@
 
     <form id="redeemForm">
         <!-- STEP 1: SENDER IC -->
+        <!-- STEP 0: SENDER TYPE -->
         <div class="form-group">
-            <label class="label">Sender MyKad / ID</label>
-            <input type="text" name="sender_id" class="input-field" placeholder="e.g. 123456-78-1234" required>
+            <label class="label">Sender Type</label>
+            <div class="fancy-input-group">
+                <i class="fas fa-user-tag" id="typeIcon"></i>
+                <select id="senderType" onchange="updateSenderInput()" required>
+                    <option value="" disabled selected>Select Sender Type...</option>
+                    <option value="Individual">Individual (Citizen)</option>
+                    <option value="Government">Government Agency</option>
+                    <option value="Private">Private Company</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- STEP 1: SENDER ID -->
+        <div class="form-group" id="senderIdGroup" style="display:none;">
+            <label class="label" id="senderIdLabel">Sender MyKad Number</label>
+            <div class="fancy-input-group">
+                <i class="fas fa-id-card" id="idIcon"></i>
+                <input type="text" name="sender_id" id="senderIdInput" placeholder="e.g. 123456-78-1234" required>
+            </div>
         </div>
 
         <!-- STEP 2: METHOD SELECTION -->
@@ -485,6 +538,36 @@
                     if (currentMethod === 'qr') switchMethod('code');
                 }
             });
+    }
+
+    // Dynamic Label Logic
+    function updateSenderInput() {
+        const type = document.getElementById('senderType').value;
+        const group = document.getElementById('senderIdGroup');
+        const label = document.getElementById('senderIdLabel');
+        const input = document.getElementById('senderIdInput');
+        const icon = document.getElementById('idIcon');
+
+        if (type === "") {
+            group.style.display = 'none';
+            return;
+        }
+
+        group.style.display = 'block';
+
+        if (type === 'Individual') {
+            label.innerText = 'Sender MyKad Number';
+            input.placeholder = 'e.g. 123456-78-1234';
+            icon.className = 'fas fa-id-card';
+        } else if (type === 'Government') {
+            label.innerText = 'Agency ID';
+            input.placeholder = 'e.g. JPN-8821';
+            icon.className = 'fas fa-building-columns';
+        } else if (type === 'Private') {
+            label.innerText = 'Company Registration No';
+            input.placeholder = 'e.g. 199901012345 (45678-A)';
+            icon.className = 'fas fa-building';
+        }
     }
 </script>
 {% endblock %}

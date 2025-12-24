@@ -424,15 +424,29 @@
                 <label class="section-label">Access Duration</label>
                 <div class="fancy-input-group">
                     <i class="fas fa-clock"></i>
-                    <select name="usage_limit" id="usageLimit" required
+                    <select name="usage_limit" id="usageLimit" onchange="toggleCustomDuration()" required
                         style="border:none; padding:12px 0; width:100%; outline:none; background:transparent;">
                         <option value="1_hour">1 Hour</option>
                         <option value="6_hours">6 Hours</option>
                         <option value="24_hours" selected>24 Hours</option>
                         <option value="3_days">3 Days</option>
                         <option value="7_days">7 Days</option>
+                        <option value="custom" style="font-weight:bold; color:var(--gov-blue);">Custom Date & Time...
+                        </option>
                     </select>
                 </div>
+            </div>
+
+            <!-- CUSTOM DURATION INPUTS (Hidden by default) -->
+            <div id="customDurationGroup"
+                style="display:none; margin-top:15px; background:#f0f9ff; padding:15px; border-radius:8px; border:1px solid #bae6fd;">
+                <label class="section-label" style="color:#0284c7;">Set Expiry Date</label>
+                <div class="datetime-grid">
+                    <input type="date" name="custom_date" id="customDate">
+                    <input type="time" name="custom_time" id="customTime">
+                </div>
+                <p style="font-size:10px; color:#0c4a6e; margin:0;"><i class="fas fa-info-circle"></i> Access will
+                    automatically expire at this time.</p>
             </div>
 
             <!-- DOWNLOAD PERMISSION -->
@@ -652,6 +666,16 @@
             input.placeholder = 'e.g. 199901012345 (45678-A)';
         } else {
             group.style.display = 'none';
+        }
+    }
+
+    function toggleCustomDuration() {
+        const usage = document.getElementById('usageLimit').value;
+        const customGroup = document.getElementById('customDurationGroup');
+        if (usage === 'custom') {
+            customGroup.style.display = 'block';
+        } else {
+            customGroup.style.display = 'none';
         }
     }
 

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Security Logs & Shares | VerifyX{% endblock %}
+{% block title %}Access Control Center | VerifyX{% endblock %}
 
 {% block styles %}
 <style>
@@ -81,6 +81,7 @@
     table {
         width: 100%;
         border-collapse: collapse;
+        min-width: 600px;
     }
 
     th {
@@ -113,11 +114,6 @@
         width: 100%;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
-    }
-
-    table {
-        min-width: 600px;
-        /* Ensure table doesn't collapse too much */
     }
 
     /* COLUMNS */
@@ -189,6 +185,12 @@
     .status-expired {
         background: #f1f5f9;
         color: #64748b;
+    }
+
+    .status-success {
+        background: #f0fdf4;
+        /* Green background? Or just standard? */
+        color: #15803d;
     }
 
     .btn-action {
@@ -319,7 +321,6 @@
         display: none;
     }
 
-    /* --- RESPONSIVE ADJUSTMENTS --- */
     @media (max-width: 768px) {
         .page-header {
             flex-direction: column;
@@ -329,9 +330,7 @@
 
         .logs-tabs {
             flex-direction: column;
-            /* Stack tabs on very small screens, or scroll? Stacking is safer */
             gap: 5px;
-            margin-bottom: 20px;
         }
 
         .tab-btn {
@@ -340,7 +339,6 @@
             padding: 10px;
         }
 
-        /* Disable hover underline effect for full width block mobile buttons, use background highlight instead */
         .tab-btn.active::after {
             display: none;
         }
@@ -349,8 +347,6 @@
             background: #eef5fc;
             border-radius: 6px;
         }
-
-        /* Table responsiveness is now global */
 
         .btn-action {
             margin-right: 5px;
@@ -375,17 +371,16 @@
 </div>
 
 <div class="logs-tabs">
-    <button class="tab-btn active" onclick="switchTab('shares')">My Managed Shares</button>
-    <button class="tab-btn" onclick="switchTab('audit')">Audit Logs</button>
+    <button class="tab-btn active" onclick="switchTab('shares')">My Shared Access</button>
+    <button class="tab-btn" onclick="switchTab('audit')">My Access Control</button>
 </div>
 
-<!-- PANEL 1: MANAGED SHARES -->
+<!-- PANEL 1: MY SHARED ACCESS (Active Shares) -->
 <div id="tab-shares" class="tab-panel active">
     {% set active_shares = [] %}
     {% for share in my_shares %}
-    {% if share.status == 'ACTIVE' %}
+    {# Showing ALL shares now per user request #}
     {% set _ = active_shares.append(share) %}
-    {% endif %}
     {% endfor %}
 
     {% if not active_shares %}
@@ -430,7 +425,17 @@
                         </td>
                         <td style="color: #64748b; font-size: 13px;">{{ share.expires_at }}</td>
                         <td>
+                            {% if share.status == 'ACTIVE' %}
                             <span class="status-badge status-active">Active</span>
+                            {% elif share.status == 'REVOKED' %}
+                            <span class="status-badge status-revoked"
+                                style="background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;">Revoked</span>
+                            {% elif share.status == 'EXPIRED' %}
+                            <span class="status-badge"
+                                style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1;">Expired</span>
+                            {% else %}
+                            <span class="status-badge">{{ share.status }}</span>
+                            {% endif %}
                         </td>
                         <td>
                             <div style="display: flex; gap: 20px; align-items: center;">
@@ -438,10 +443,12 @@
                                     style="margin-right: 0;">
                                     <i class="fas fa-history"></i> History
                                 </button>
+                                {% if share.status == 'ACTIVE' %}
                                 <button class="btn-action btn-revoke" onclick="revokeShare('{{ share.id }}', this)"
                                     style="margin-right: 0;">
                                     <i class="fas fa-ban"></i> Revoke
                                 </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -449,12 +456,11 @@
                 </tbody>
             </table>
         </div>
-    </div><!-- /.table-responsive -->
-</div>
-{% endif %}
+    </div>
+    {% endif %}
 </div>
 
-<!-- PANEL 2: AUDIT LOGS -->
+<!-- PANEL 2: MY ACCESS CONTROL (Audit Logs) -->
 <div id="tab-audit" class="tab-panel">
     <div class="table-card">
         <div class="table-responsive">
@@ -492,6 +498,14 @@
                                 </div>
                                 <div>
                                     <span class="org-name">{{ log.organization_name }}</span>
+
+                                    {% if log.recipient_id %}
+                                    <div
+                                        style="font-size: 11px; color: #0284c7; background: #e0f2fe; padding: 2px 6px; border-radius: 4px; border: 1px solid #bfdbfe; display: inline-block; margin-top: 2px; font-weight: 600;">
+                                        <i class="fas fa-user-tag"></i> {{ log.recipient_id }}
+                                    </div>
+                                    {% endif %}
+
                                     <span class="access-id">Log ID: #{{ log.id }} ({{ log.action }})</span>
                                 </div>
                             </div>
@@ -513,8 +527,7 @@
                         <td>
                             {% if log.status == 'ACTIVE' %}
                             <span class="status-badge status-active"><i class="fas fa-circle"
-                                    style="font-size: 6px;"></i>
-                                Active</span>
+                                    style="font-size: 6px;"></i> Active</span>
                             {% elif log.status == 'REVOKED' or log.status == 'BLOCKED' or log.status == 'FAILED' %}
                             <span class="status-badge status-revoked"><i class="fas fa-ban"></i> {{ log.status|upper
                                 }}</span>
@@ -523,13 +536,19 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% if log.status == 'ACTIVE' %}
+                            {% if log.share_id and log.share_status == 'ACTIVE' %}
+                            <button class="btn-action btn-revoke" onclick="revokeShare('{{ log.share_id }}', this)">
+                                <i class="fas fa-ban"></i> Revoke
+                            </button>
+                            {% elif log.status == 'ACTIVE' and not log.share_id %}
                             <button class="btn-action btn-revoke" data-log-id="{{ log.id }}"
                                 onclick="revokeAccess(this)">
-                                <i class="fas fa-power-off"></i> Revoke
+                                <i class="fas fa-ban"></i> Revoke
                             </button>
+                            {% elif log.share_status == 'REVOKED' or log.status == 'REVOKED' %}
+                            <span style="font-size:11px; color:#b91c1c; font-weight:600;">Revoked</span>
                             {% else %}
-                            <span style="font-size:11px; color:#aaa;">Archived</span>
+                            <span style="font-size:11px; color:#aaa;">Log Recorded</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -546,8 +565,7 @@
             </div>
             {% endif %}
         </div>
-    </div><!-- /.table-responsive -->
-</div>
+    </div>
 </div>
 
 <div id="toast"></div>
@@ -563,20 +581,14 @@
     }
 
     function showMoreLogs() {
-        // Get all currently hidden log rows
         const hiddenLogs = document.querySelectorAll('.hidden-log');
         let count = 0;
         const LIMIT = 10;
-
-        // Show the next 10 items
         for (let i = 0; i < hiddenLogs.length; i++) {
             if (count >= LIMIT) break;
             hiddenLogs[i].classList.remove('hidden-log');
             count++;
         }
-
-        // Check if there are ANY hidden logs left after this operation
-        // If 0, hide the "Show More" button entirely
         if (document.querySelectorAll('.hidden-log').length === 0) {
             const btn = document.getElementById('show-more-btn');
             if (btn) btn.style.display = 'none';
@@ -591,7 +603,8 @@
 
         // Show specific
         document.getElementById('tab-' + tabName).classList.add('active');
-        // Find button (simple hack based on order or name, but let's iterate)
+
+        // Update Buttons
         const buttons = document.querySelectorAll('.tab-btn');
         if (tabName === 'shares') buttons[0].classList.add('active');
         if (tabName === 'audit') buttons[1].classList.add('active');
@@ -599,12 +612,8 @@
 
     // LOG FILTERING LOGIC
     function filterLogsByShare(shareId) {
-        // 1. First, check if there are matches BEFORE switching tabs
         const allRows = document.querySelectorAll('.log-row');
         let matchCount = 0;
-
-        // We need to check all rows (even hidden ones)
-        // Note: We don't modify DOM display yet, just count
         allRows.forEach(row => {
             const context = row.getAttribute('data-context') || "";
             if (context.includes('ShareID:' + shareId)) {
@@ -614,28 +623,22 @@
 
         if (matchCount === 0) {
             showToast("No history events found for this share yet.");
-            return; // EXIT: Do not switch tab
+            return;
         }
 
-        // 2. If matches found, switch and filter
+        // Switch to generic audit tab
         switchTab('audit');
 
-        // Ensure all logs are potentially visible logic-wise (remove pagination hiding)
-        // so that the filter can show them even if they were on page 2
-        // We just unhide EVERYTHING to be safe and simple
         const hiddenLogs = document.querySelectorAll('.hidden-log');
         hiddenLogs.forEach(h => h.classList.remove('hidden-log'));
-
-        // Hide "Show More" button since we are now in a filtered view
         const btn = document.getElementById('show-more-btn');
         if (btn) btn.style.display = 'none';
 
-        // 3. Apply the filter
         allRows.forEach(row => {
             const context = row.getAttribute('data-context') || "";
             if (context.includes('ShareID:' + shareId)) {
                 row.style.display = 'table-row';
-                row.style.backgroundColor = '#ecfeff'; // Highlight
+                row.style.backgroundColor = '#ecfeff';
             } else {
                 row.style.display = 'none';
             }
@@ -661,24 +664,31 @@
             });
     }
 
-    async function revokeAccess(button) {
-        const logId = button.getAttribute('data-log-id');
-        if (!confirm(`Are you sure you want to revoke access?`)) return;
+    function revokeAccess(btn) {
+        var logId = btn.getAttribute('data-log-id');
+        if (!confirm("Are you sure you want to revoke this access record?")) return;
 
-        try {
-            const response = await fetch(`/revoke_access/${logId}`, { method: 'POST' });
-            const data = await response.json();
-            if (response.ok) {
-                showToast(data.message);
-                button.closest('tr').querySelector('.status-badge').className = "status-badge status-revoked";
-                button.closest('tr').querySelector('.status-badge').innerText = "REVOKED";
-                button.remove();
-            } else {
-                showToast(data.message);
-            }
-        } catch (error) {
-            console.error(error);
-            showToast('Network error.');
+        fetch('/revoke_access/' + logId, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast("Access Revoked Successfully");
+                    var row = btn.closest('tr');
+                    row.querySelector('.status-badge').className = "status-badge status-revoked";
+                    row.querySelector('.status-badge').innerHTML = '<i class="fas fa-ban"></i> REVOKED';
+                    btn.remove();
+                } else {
+                    showToast("Error: " + data.message);
+                }
+            });
+    }
+
+    // Auto Filter from URL
+    window.onload = function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        const shareId = urlParams.get('filter_share');
+        if (shareId) {
+            filterLogsByShare(shareId);
         }
     }
 </script>
