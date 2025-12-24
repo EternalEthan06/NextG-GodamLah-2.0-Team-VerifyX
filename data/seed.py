@@ -1,4 +1,3 @@
-
 import sqlite3
 import random
 from faker import Faker
@@ -43,7 +42,8 @@ def create_database():
             face_image_blob BLOB,
             face_encoding_blob BLOB,
             failed_attempts INTEGER DEFAULT 0,
-            lockout_until DATETIME DEFAULT NULL
+            lockout_until DATETIME DEFAULT NULL,
+            is_enrollment_complete INTEGER DEFAULT 0
         )
     ''')
 
@@ -59,7 +59,7 @@ def create_database():
             status TEXT
         )
     ''')
-
+    
     # Create Share Sessions Table (Was missing in seed)
     cursor.execute('DROP TABLE IF EXISTS share_sessions')
     cursor.execute('''
@@ -100,7 +100,8 @@ def create_database():
         MOCK_ENCRYPTER.encrypt_cell("Active"),
         None,
         None,
-        None
+        None,
+        1 # is_enrollment_complete
     ))
 
     # --- CUSTOM USERS REQUESTED ---
@@ -119,13 +120,14 @@ def create_database():
         MOCK_ENCRYPTER.encrypt_cell("Active"),
         None,
         None,
-        None
+        None,
+        1 # is_enrollment_complete
     ))
 
-    # 3. Chloe Lai Pui Yan
+    # 3. Chloe Lai Phui Yan
     chloe_mykad = "021115-08-5678"
     citizens_data_for_db.append((
-        "Chloe Lai Pui Yan", 
+        "Chloe Lai Phui Yan", 
         chloe_mykad, 
         "456, Lorong Bunga, Penang", 
         "M40", 
@@ -137,7 +139,8 @@ def create_database():
         MOCK_ENCRYPTER.encrypt_cell("Inactive"),
         None,
         None,
-        None
+        None,
+        1 # is_enrollment_complete
     ))
 
     income_options = ["B40", "M40", "T20"]
@@ -163,14 +166,14 @@ def create_database():
         water_bill_data = MOCK_ENCRYPTER.encrypt_cell(f"ACCT-B{mykad[-4:]}-RM150 | Status: Paid")
         oku_data = MOCK_ENCRYPTER.encrypt_cell(oku)
 
-        citizens_data_for_db.append((name, mykad, address, income, oku, signature, password_storage_hash, birth_cert_data, water_bill_data, oku_data, None, None, None))
+        citizens_data_for_db.append((name, mykad, address, income, oku, signature, password_storage_hash, birth_cert_data, water_bill_data, oku_data, None, None, None, 1))
 
 
     # Insert citizen data
     cursor.executemany('''
         INSERT INTO citizens (full_name, mykad_number, address, income_bracket, oku_status, digital_signature, 
-                              password_hash, birth_cert_enc, water_bill_enc, oku_status_enc, voice_audio_blob, face_image_blob, face_encoding_blob)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              password_hash, birth_cert_enc, water_bill_enc, oku_status_enc, voice_audio_blob, face_image_blob, face_encoding_blob, is_enrollment_complete)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', citizens_data_for_db)
     
     # 5. Insert Mock Access Log Data (Populates the new access_logs table)
