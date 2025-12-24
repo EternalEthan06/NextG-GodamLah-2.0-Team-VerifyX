@@ -819,7 +819,7 @@ def verify_gesture_identity():
         
         # MIRROR FALLBACK CHECK
         # If normal check fails, try flipping the image horizontally.
-        if dist_original > 0.85:
+        if dist_original > 1.15:
              try:
                  # Load original PIL (we need to re-open or if we had it.. we only had bytes. Re-open)
                  pil_img = Image.open(io.BytesIO(image_blob)).convert('RGB')
@@ -846,7 +846,7 @@ def verify_gesture_identity():
         # Threshold similar to verify_face
         # Threshold similar to verify_face
         # Relaxing to 0.85 to account for hand occlusion/expression changes during gesture
-        if final_distance > 0.85: 
+        if final_distance > 1.15: 
              log_action(mykad, "GESTURE_VERIFY", f"Face Mismatch (Dist={final_distance:.2f})", "System", "FAILED")
              return jsonify({'status': 'failure', 'message': 'Identity verification failed. Face does not match.'})
 
