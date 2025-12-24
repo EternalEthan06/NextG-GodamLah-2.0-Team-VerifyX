@@ -101,7 +101,7 @@ def create_database():
         None,
         None,
         None,
-        1 # is_enrollment_complete
+        0 # is_enrollment_complete
     ))
 
     # --- CUSTOM USERS REQUESTED ---
@@ -121,7 +121,7 @@ def create_database():
         None,
         None,
         None,
-        1 # is_enrollment_complete
+        0 # is_enrollment_complete
     ))
 
     # 3. Chloe Lai Phui Yan
@@ -140,7 +140,7 @@ def create_database():
         None,
         None,
         None,
-        1 # is_enrollment_complete
+        0 # is_enrollment_complete
     ))
 
     income_options = ["B40", "M40", "T20"]
@@ -166,7 +166,7 @@ def create_database():
         water_bill_data = MOCK_ENCRYPTER.encrypt_cell(f"ACCT-B{mykad[-4:]}-RM150 | Status: Paid")
         oku_data = MOCK_ENCRYPTER.encrypt_cell(oku)
 
-        citizens_data_for_db.append((name, mykad, address, income, oku, signature, password_storage_hash, birth_cert_data, water_bill_data, oku_data, None, None, None, 1))
+        citizens_data_for_db.append((name, mykad, address, income, oku, signature, password_storage_hash, birth_cert_data, water_bill_data, oku_data, None, None, None, 0))
 
 
     # Insert citizen data
