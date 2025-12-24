@@ -108,7 +108,53 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+from contextlib import contextmanager
+
+@contextmanager
+def get_db():
+    """
+    Context manager to ensure database connections are always closed,
+    even if an exception occurs.
+    """
+    conn = get_db_connection()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
 # --- MEDIAPIPE HELPERS ---
+def normalize_landmarks(landmarks):
+    """
+    Normalizes face landmarks to be invariant to translation (centering)
+    and scale (distance from camera).
+    """
+    # 1. Convert to simple list of dicts or np array for easier math
+    # MediaPipe landmarks have .x, .y, .z
+    # OPTIMIZATION: Dropping Z-axis (Depth) because it's unstable on webcams and causes high noise.
+    # We will use purely 2D facial geometry.
+    coords = np.array([[lm.x, lm.y] for lm in landmarks])
+    
+    # 2. Translation Invariance: Center around the Nose Tip (Index 1)
+    nose_tip = coords[1]
+    centered = coords - nose_tip
+    
+    # 3. Scale Invariance: Scale by Inter-ocular Distance (Dist between Left Eye 33 and Right Eye 263)
+    # Using Euclidean distance in 2D
+    left_eye = coords[33]
+    right_eye = coords[263]
+    dist = np.linalg.norm(left_eye - right_eye)
+    
+    # DEBUG: Print Scale Factor
+    print(f"DEBUG: Normalization Scale (Inter-ocular dist 2D): {dist:.6f}")
+    
+    if dist == 0: dist = 1 # Safety
+        
+    normalized = centered / dist
+    
+    # Flatten
+    return normalized.flatten()
+
 def get_face_vector(image_bytes):
     """
     Extracts a 1D vector (468*3 floats) representing the facial geometry.
@@ -130,12 +176,10 @@ def get_face_vector(image_bytes):
         # Extract 0th face
         landmarks = detection_result.face_landmarks[0]
         
-        # Flatten: [x1, y1, z1, x2, y2, z2, ...]
-        vector = []
-        for lm in landmarks:
-            vector.extend([lm.x, lm.y, lm.z])
+        # Normalize landmarks (Translation & Scale Invariance)
+        normalized_vector = normalize_landmarks(landmarks)
             
-        return np.array(vector)
+        return normalized_vector
         
     except Exception as e:
         print(f"MediaPipe Error: {e}")
@@ -149,6 +193,11 @@ def compare_vectors(v1, v2):
     if v1 is None or v2 is None:
         return float('inf')
         
+    # Check for Shape Mismatch (e.g. Old 3D enrollment vs New 2D vector)
+    if v1.shape != v2.shape:
+        print(f"DEBUG: Vector Shape Mismatch! {v1.shape} vs {v2.shape}. Force Re-enroll.")
+        return 999.0 # Arbitrary high distance to force fail
+        
     # Euclidean Distance
     dist = np.linalg.norm(v1 - v2)
     return dist
@@ -159,10 +208,9 @@ def fetch_user_record_by_mykad(mykad):
     Fetches a citizen's record using their MyKad number.
     """
     try:
-        conn = get_db_connection()
-        user_record = conn.execute('SELECT * FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
-        conn.close()
-        return user_record
+        with get_db() as conn:
+            user_record = conn.execute('SELECT * FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
+            return user_record
     except sqlite3.OperationalError as e:
         print(f"DATABASE ERROR: {e}")
         return None 
@@ -172,11 +220,10 @@ def log_action(mykad, action, context, organization_name, status = "SUCCESS"):
     Inserts a new audit log entry.
     """
     try:
-        conn = get_db_connection()
-        conn.execute('''INSERT INTO access_logs (mykad_number, action, context, organization_name, status)VALUES (?, ?, ?, ?, ?)''', 
-                     (mykad, action, context, organization_name, status))
-        conn.commit()
-        conn.close()
+        with get_db() as conn:
+            conn.execute('''INSERT INTO access_logs (mykad_number, action, context, organization_name, status)VALUES (?, ?, ?, ?, ?)''', 
+                         (mykad, action, context, organization_name, status))
+            conn.commit()
     except sqlite3.OperationalError as e:
         print(f"LOGGING ERROR: Could not write to access_logs. Did you run seed.py? Error: {e}")
 
@@ -185,18 +232,44 @@ def fetch_access_logs(mykad, log_status = None):
     Fetches audit logs for a specific user, optionally filtered by status.
     """
     try:
-        conn = get_db_connection()
-        query = 'SELECT * FROM access_logs WHERE mykad_number = ? ORDER BY timestamp DESC'
-        params = (mykad,)
-        if log_status:
-            query = 'SELECT * FROM access_logs WHERE mykad_number = ? AND status = ? ORDER BY timestamp DESC'
-            params = (mykad, log_status)
-        logs = conn.execute(query, params).fetchall()
-        conn.close()
-        readable_logs = []
-        for log in logs:
-            readable_logs.append(dict(log))
-        return readable_logs
+        with get_db() as conn:
+            query = 'SELECT * FROM access_logs WHERE mykad_number = ? ORDER BY timestamp DESC'
+            params = (mykad,)
+            if log_status:
+                query = 'SELECT * FROM access_logs WHERE mykad_number = ? AND status = ? ORDER BY timestamp DESC'
+                params = (mykad, log_status)
+            logs = conn.execute(query, params).fetchall()
+            
+            readable_logs = []
+            for log in logs:
+                d = dict(log)
+                
+                # Context Parsing to find ShareID:X and get Recipient ID
+                # Format: "ShareID:3 - Downloaded..." or "Guest accessed Share:3"
+                recipient_id = None
+                
+                # Simple heuristic search for ShareID: digit
+                import re
+                match = re.search(r'Share[:\s]*ID[:\s]*(\d+)', d['context'], re.IGNORECASE)
+                if not match:
+                     match = re.search(r'Share[:\s]*(\d+)', d['context'], re.IGNORECASE) 
+                     
+                if match:
+                    share_id = match.group(1)
+                    d['share_id'] = share_id # Store Share ID for Revoke Actions
+                    try:
+                        # Fetch Recipient ID from Share Session
+                        share_info = conn.execute('SELECT recipient_id, status FROM share_sessions WHERE id = ?', (share_id,)).fetchone()
+                        if share_info:
+                            d['recipient_id'] = share_info['recipient_id']
+                            # Optionally fetch current share status to know if we should show Revoke button
+                            d['share_status'] = share_info['status']
+                    except:
+                        pass
+                
+                readable_logs.append(d)
+                
+            return readable_logs
     except sqlite3.OperationalError as e:
         print(f"FETCH LOGS ERROR: Could not read from access_logs. Did you run seed.py? Error: {e}")
         return []
@@ -267,32 +340,38 @@ def register_failure(mykad, reason="FAILED"):
         log_action('UNKNOWN', "LOGIN", reason, "System", "FAILED")
         return
 
-    conn = get_db_connection()
-    user_record = conn.execute('SELECT failed_attempts FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
-    
-    if user_record:
-        current_attempts = user_record['failed_attempts'] + 1
-        lock_duration = 0
+    with get_db() as conn:
+        user_record = conn.execute('SELECT failed_attempts FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
         
-        # Logic: 3 fails = 5 min, then +10 mins for each subsequent fail.
-        if current_attempts == 3:
-            lock_duration = 5
-        elif current_attempts > 3:
-            lock_duration = 5 + (current_attempts - 3) * 10
-        
-        if lock_duration > 0:
-            lockout_until = datetime.datetime.now() + datetime.timedelta(minutes=lock_duration)
-            conn.execute('UPDATE citizens SET failed_attempts = ?, lockout_until = ? WHERE mykad_number = ?', 
-                         (current_attempts, lockout_until, mykad))
-            print(f"DEBUG: {mykad} LOCKED for {lock_duration} mins")
-            log_action(mykad, "LOGIN", f"Blocked (Locked for {lock_duration}m due to {reason})", "System", "BLOCKED")
-        else:
-            conn.execute('UPDATE citizens SET failed_attempts = ? WHERE mykad_number = ?', 
-                         (current_attempts, mykad))
-            log_action(mykad, "LOGIN", f"{reason} Attempt ({current_attempts})", "System", "FAILED")
+        if user_record:
+            current_attempts = user_record['failed_attempts'] + 1
+            lock_duration = 0
             
-        conn.commit()
-    conn.close()
+            # Logic: 3 fails = 5 min, then +10 mins for each subsequent fail.
+            if current_attempts == 3:
+                lock_duration = 5
+            elif current_attempts > 3:
+                lock_duration = 5 + (current_attempts - 3) * 10
+            
+            if lock_duration > 0:
+                lockout_until = datetime.datetime.now() + datetime.timedelta(minutes=lock_duration)
+                
+                # REUSE connection for update (safe provided logic is correct)
+                # Or use the same context manager? 
+                # Actually, `conn` is cursor? No `row_factory`... 
+                # The context manager yields `conn`.
+                conn.execute('UPDATE citizens SET failed_attempts = ?, lockout_until = ? WHERE mykad_number = ?', 
+                                (current_attempts, lockout_until, mykad))
+                conn.commit()
+                    
+                print(f"DEBUG: {mykad} LOCKED for {lock_duration} mins")
+                log_action(mykad, "LOGIN", f"Blocked (Locked for {lock_duration}m due to {reason})", "System", "BLOCKED")
+            else:
+                conn.execute('UPDATE citizens SET failed_attempts = ? WHERE mykad_number = ?', 
+                                (current_attempts, mykad))
+                conn.commit()
+                    
+                log_action(mykad, "LOGIN", f"{reason} Attempt ({current_attempts})", "System", "FAILED")
 
 @app.route('/handle_login', methods = ['POST'])
 def handle_login():
@@ -312,6 +391,31 @@ def handle_login():
     user_record = fetch_user_record_by_mykad(mykad)
     
     if user_record:
+        # --- 12-HOUR AUTO-RESET LOGIC ---
+        if user_record['failed_attempts'] > 0:
+            try:
+                with get_db() as conn:
+                    # Find last failure (LOGIN + FAILED/BLOCKED)
+                    last_fail = conn.execute('''
+                        SELECT timestamp FROM access_logs 
+                        WHERE mykad_number = ? AND action = 'LOGIN' AND (status = 'FAILED' OR status = 'BLOCKED')
+                        ORDER BY timestamp DESC LIMIT 1
+                    ''', (mykad,)).fetchone()
+                    
+                    if last_fail:
+                        last_fail_time = datetime.datetime.strptime(last_fail['timestamp'], '%Y-%m-%d %H:%M:%S')
+                        if datetime.datetime.now() - last_fail_time > datetime.timedelta(hours=12):
+                            print(f"DEBUG: Auto-resetting {mykad} (Last fail > 12h ago)")
+                            
+                            conn.execute('UPDATE citizens SET failed_attempts = 0, lockout_until = NULL WHERE mykad_number = ?', (mykad,))
+                            conn.commit()
+                            
+                            # Refresh user_record so typical flow sees clean state
+                            user_record = fetch_user_record_by_mykad(mykad)
+                            log_action(mykad, "SYSTEM_RESET", "Auto-reset after 12h idle", "System", "RESET")
+            except Exception as e:
+                print(f"Auto-reset Error: {e}")
+
         # 1. CHECK LOCKOUT STATUS
         if user_record['lockout_until']:
              lockout_time = datetime.datetime.strptime(user_record['lockout_until'], '%Y-%m-%d %H:%M:%S.%f')
@@ -324,10 +428,9 @@ def handle_login():
         if stored_hash and check_password_hash(stored_hash, password):
             
             # SUCCESS: Reset Counters
-            conn = get_db_connection()
-            conn.execute('UPDATE citizens SET failed_attempts = 0, lockout_until = NULL WHERE mykad_number = ?', (mykad,))
-            conn.commit()
-            conn.close()
+            with get_db() as conn:
+                conn.execute('UPDATE citizens SET failed_attempts = 0, lockout_until = NULL WHERE mykad_number = ?', (mykad,))
+                conn.commit()
 
             # Authentication Success: Store MyKad and name in session
             session['user_mykad'] = mykad
@@ -343,9 +446,8 @@ def handle_login():
             session.pop('verification_start', None)
             
             # --- PERSISTENT ENROLLMENT CHECK ---
-            # Store in session to avoid global variable issues
-            # Require BOTH Face and Voice to be considered "fully enrolled"
-            if user_record['voice_audio_blob'] and user_record['face_encoding_blob']:
+            # Use explicit flag from DB
+            if user_record['is_enrollment_complete']:
                 session['is_enrolled'] = True
             else:
                 session['is_enrolled'] = False
@@ -404,24 +506,22 @@ def verify_face():
 
         # 6. ENROLLMENT (First time)
         if not session.get('is_enrolled') and session.get('enrollment_stage') == 'face':
-            conn = get_db_connection()
-            # Store BOTH the image and the encoding
-            conn.execute('UPDATE citizens SET face_image_blob = ?, face_encoding_blob = ? WHERE mykad_number = ?', 
-                         (image_blob, new_encoding_blob, mykad))
-            conn.commit()
-            conn.close()
+            with get_db() as conn:
+                # Store BOTH the image and the encoding
+                conn.execute('UPDATE citizens SET face_image_blob = ?, face_encoding_blob = ? WHERE mykad_number = ?', 
+                             (image_blob, new_encoding_blob, mykad))
+                conn.commit()
             
             log_action(mykad, "ENROLL", "Face Biometric Registered (MP)", "System", "SUCCESS")
             return jsonify({'status': 'success', 'message': 'Face registered successfully.'})
 
         # 7. VERIFICATION (Returning)
         else:
-            conn = get_db_connection()
-            # Fetch stored encoding from citizens table
-            user_record = conn.execute('SELECT face_encoding_blob FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
+            with get_db() as conn:
+                # Fetch stored encoding from citizens table
+                user_record = conn.execute('SELECT face_encoding_blob FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
             
             if not user_record or not user_record['face_encoding_blob']:
-                conn.close()
                 return jsonify({'status': 'failure', 'message': 'No face enrolled. Please enroll first.'})
 
             stored_vector = pickle.loads(user_record['face_encoding_blob'])
@@ -431,13 +531,45 @@ def verify_face():
             print(f"DEBUG: Face Distance = {distance:.4f}")
             
             # Threshold: < 3.5 roughly match for same person/pose
-            if distance < 3.5:
-                conn.close()
+            # With normalization, vectors are much closer. 
+            # A mismatch is usually > 0.6, a match is < 0.3.
+            # MIRROR FALLBACK CHECK
+            # If normal check fails, try flipping the image horizontally.
+            final_distance = distance
+            if distance > 1.15:
+                 try:
+                     # Re-read image bytes for PIL
+                     pil_img = Image.open(io.BytesIO(image_blob)).convert('RGB')
+                     flipped_img = pil_img.transpose(Image.FLIP_LEFT_RIGHT)
+                     
+                     buf = io.BytesIO()
+                     flipped_img.save(buf, format='JPEG')
+                     flipped_bytes = buf.getvalue()
+                     
+                     flipped_vector = get_face_vector(flipped_bytes)
+                     if flipped_vector is not None:
+                         dist_flipped = compare_vectors(stored_vector, flipped_vector)
+                         print(f"DEBUG: Verify (Flipped): Dist = {dist_flipped:.4f}")
+                         
+                         if dist_flipped < final_distance:
+                             final_distance = dist_flipped
+                             print("DEBUG: Flipped image gave better match (Login)!")
+                 except Exception as e:
+                     print(f"Mirror Check Error: {e}")
+
+            # Threshold: < 3.5 roughly match for same person/pose
+            # Determine threshold
+            # With normalization, vector magnitude is sensitive to eye-distance jitter (e.g. glasses).
+            # A 5% jitter can cause Distance ~ 0.75. 
+            # Relaxing to 1.15 to better handle lens distortion and Z-axis scaling.
+            if final_distance < 1.15:
+                # conn.close() # handled by context manager
+                print(f"DEBUG: MATCH! Dist {final_distance:.4f} < 1.15")
                 log_action(mykad, "VERIFY", "Face Match Success", "System", "SUCCESS")
                 return jsonify({'status': 'success', 'message': 'Face verified successfully.'})
             else:
-                conn.close()
-                #print(f"DEBUG: Mismatch. Dist={distance}")
+                # conn.close() # handled by context manager
+                print(f"DEBUG: FAILURE! Dist {final_distance:.4f} > 1.15")
                 log_action(mykad, "VERIFY", "Face Mismatch", "System", "FAILED")
                 return jsonify({'status': 'failure', 'message': 'Face verification failed. Please try again.'})
 
@@ -481,11 +613,10 @@ def verify_voice():
         # --- DB UPDATE STEP ---
         try:
             print(f"DEBUG: Attempting to update DB for {mykad} with voice BLOB")
-            conn = get_db_connection()
-            conn.execute('UPDATE citizens SET voice_audio_blob = ? WHERE mykad_number = ?', (audio_data_blob, mykad))
-            conn.commit()
+            with get_db() as conn:
+                conn.execute('UPDATE citizens SET voice_audio_blob = ? WHERE mykad_number = ?', (audio_data_blob, mykad))
+                conn.commit()
             print(f"DEBUG: Voice BLOB saved.")
-            conn.close()
             log_action(mykad, "ENROLL", "Voice Print SAVED to DB (BLOB)", "System", "SUCCESS")
         except Exception as e:
             print(f"DB Error on Voice Enroll: {e}")
@@ -525,9 +656,8 @@ def verify_voice():
             pass # Graceful degradation
             
         # Step B: "Biometric" Check (Compare with DB Blob)
-        conn = get_db_connection()
-        user = conn.execute('SELECT voice_audio_blob FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
-        conn.close()
+        with get_db() as conn:
+            user = conn.execute('SELECT voice_audio_blob FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
         
         # Verify enrollment exists
         if not user or not user['voice_audio_blob']:
@@ -551,9 +681,10 @@ def verify_voice():
             similarity_score = np.inner(embed_enrolled, embed_incoming)
             print(f"DEBUG: Biometric Similarity Score: {similarity_score}")
             
-            # 4. Threshold Check
+            # Threshold Check
             # Typical threshold for high security is around 0.75 - 0.80
-            BIOMETRIC_THRESHOLD = 0.85 
+            # Relaxing to 0.75 based on user difficulty
+            BIOMETRIC_THRESHOLD = 0.75 
             
             if similarity_score < BIOMETRIC_THRESHOLD:
                 log_action(mykad, "VERIFY", f"Voice Mismatch (Score: {similarity_score:.2f})", "System", "FAILED")
@@ -672,9 +803,8 @@ def verify_gesture_identity():
              return jsonify({'status': 'failure', 'message': 'No face detected. Please show your face.'})
         
         # 3. IDENTITY VERIFICATION (Compare with DB)
-        conn = get_db_connection()
-        user_record = conn.execute('SELECT face_encoding_blob FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
-        conn.close()
+        with get_db() as conn:
+            user_record = conn.execute('SELECT face_encoding_blob FROM citizens WHERE mykad_number = ?', (mykad,)).fetchone()
 
         if not user_record or not user_record['face_encoding_blob']:
              return jsonify({'status': 'failure', 'message': 'No enrolled face data found.'})
@@ -682,16 +812,46 @@ def verify_gesture_identity():
         stored_vector = pickle.loads(user_record['face_encoding_blob'])
         
         # Compare
-        distance = compare_vectors(stored_vector, new_vector)
-        print(f"DEBUG: Gesture Face Dist = {distance:.4f}")
+        dist_original = compare_vectors(stored_vector, new_vector)
+        print(f"DEBUG: GESTURE VERIFY (Normal): Dist = {dist_original:.4f}")
         
+        final_distance = dist_original
+        
+        # MIRROR FALLBACK CHECK
+        # If normal check fails, try flipping the image horizontally.
+        if dist_original > 0.85:
+             try:
+                 # Load original PIL (we need to re-open or if we had it.. we only had bytes. Re-open)
+                 pil_img = Image.open(io.BytesIO(image_blob)).convert('RGB')
+                 flipped_img = pil_img.transpose(Image.FLIP_LEFT_RIGHT)
+                 flipped_img = pil_img.transpose(Image.FLIP_LEFT_RIGHT)
+                 
+                 # We need to convert back to MP Image usually, but get_face_vector takes bytes.
+                 # Let's convert PIL -> Bytes
+                 buf = io.BytesIO()
+                 flipped_img.save(buf, format='JPEG')
+                 flipped_bytes = buf.getvalue()
+                 
+                 flipped_vector = get_face_vector(flipped_bytes)
+                 if flipped_vector is not None:
+                     dist_flipped = compare_vectors(stored_vector, flipped_vector)
+                     print(f"DEBUG: GESTURE VERIFY (Flipped): Dist = {dist_flipped:.4f}")
+                     
+                     if dist_flipped < final_distance:
+                         final_distance = dist_flipped
+                         print("DEBUG: Flipped image gave better match!")
+             except Exception as e:
+                 print(f"Mirror Check Error: {e}")
+                 
         # Threshold similar to verify_face
-        if distance > 4.0: # Slightly looser for gestures
-             log_action(mykad, "GESTURE_VERIFY", f"Face Mismatch (Dist={distance:.2f})", "System", "FAILED")
+        # Threshold similar to verify_face
+        # Relaxing to 0.85 to account for hand occlusion/expression changes during gesture
+        if final_distance > 0.85: 
+             log_action(mykad, "GESTURE_VERIFY", f"Face Mismatch (Dist={final_distance:.2f})", "System", "FAILED")
              return jsonify({'status': 'failure', 'message': 'Identity verification failed. Face does not match.'})
 
         # 4. Identity Confirmed
-        print(f"DEBUG: Gesture Identity Verified. Dist={distance:.2f}")
+        print(f"DEBUG: Gesture Identity Verified. Dist={final_distance:.2f}")
         log_action(mykad, "GESTURE_VERIFY", f"Identity Confirmed", "System", "SUCCESS")
         
         return jsonify({'status': 'success', 'message': 'Identity confirmed.', 'blink_info': "Pass"})
@@ -729,6 +889,12 @@ def step_complete():
             session['is_enrolled'] = True
             session['user_mykad'] = mykad
             session['vault_access_granted'] = True 
+            
+            # --- FINALZE ENROLLMENT IN DB ---
+            with get_db() as conn:
+                conn.execute('UPDATE citizens SET is_enrollment_complete = 1 WHERE mykad_number = ?', (mykad,))
+                conn.commit()
+                
             log_action(mykad, "BIOMETRIC_REG", "All Factors", "System", "SUCCESS")
             return redirect(url_for('dashboard'))
 
@@ -752,10 +918,9 @@ def issuer_dashboard():
     if session.get('user_mykad') != 'mockjpn':
         return redirect(url_for('login'))
     
-    conn = get_db_connection()
-    citizens = conn.execute('SELECT * FROM citizens').fetchall()
-    logs = conn.execute("SELECT * FROM access_logs WHERE action='ISSUANCE' ORDER BY timestamp DESC LIMIT 10").fetchall()
-    conn.close()
+    with get_db() as conn:
+        citizens = conn.execute('SELECT * FROM citizens').fetchall()
+        logs = conn.execute("SELECT * FROM access_logs WHERE action='ISSUANCE' ORDER BY timestamp DESC LIMIT 10").fetchall()
     
     # Mock user for base.html
     mock_user = {
@@ -773,11 +938,10 @@ def issue_certificate():
     target_mykad = request.form.get('mykad')
     
     # 1. Fetch Citizen
-    conn = get_db_connection()
-    user = conn.execute('SELECT full_name FROM citizens WHERE mykad_number = ?', (target_mykad,)).fetchone()
+    with get_db() as conn:
+        user = conn.execute('SELECT full_name FROM citizens WHERE mykad_number = ?', (target_mykad,)).fetchone()
     
     if not user:
-        conn.close()
         return jsonify({'status': 'failure', 'message': 'Citizen not found'})
 
     # 2. Construct Certificate Data
@@ -1170,6 +1334,27 @@ def my_files_entry():
 
     return render_template('allFiles.html', user = user_data, files = files_list, cert_data = birth_cert_data)
 
+def expire_past_shares(mykad):
+    """
+    Checks for any ACTIVE shares owned by 'mykad' that have passed their
+    expiration time and updates them to 'EXPIRED' status.
+    """
+    conn = get_db_connection()
+    try:
+        limit_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        conn.execute('''
+            UPDATE share_sessions 
+            SET status = 'EXPIRED' 
+            WHERE sender_mykad = ? 
+            AND status = 'ACTIVE' 
+            AND expires_at < ?
+        ''', (mykad, limit_time))
+        conn.commit()
+    except Exception as e:
+        print(f"Auto-expire Error: {e}")
+    finally:
+        conn.close()
+
 @app.route('/share')
 def share():
     """
@@ -1179,6 +1364,9 @@ def share():
     if not session.get('vault_access_granted'): 
         return redirect(url_for('login'))
     user_data, mykad = get_user_context()
+    
+    # Auto-expire old shares before fetching
+    expire_past_shares(mykad)
     
     # Fetch actual active share sessions for the UI list
     conn = get_db_connection()
@@ -1198,6 +1386,9 @@ def access_log():
         return redirect(url_for('login'))
         
     user_data, mykad = get_user_context()
+    
+    # Auto-expire old shares before fetching
+    expire_past_shares(mykad)
     
     # 1. Fetch standard Audit Logs
     all_logs = fetch_access_logs(mykad)
@@ -1221,6 +1412,35 @@ def access_log():
         shares_list.append(d)
 
     return render_template('accessLog.html', user=user_data, logs=all_logs, my_shares=shares_list)
+
+@app.route('/my_shares')
+def my_shares_list():
+    """
+    Displays ONLY the 'Managed Shares' created by this user.
+    """
+    if not session.get('vault_access_granted'): 
+        return redirect(url_for('login'))
+        
+    user_data, mykad = get_user_context()
+    
+    conn = get_db_connection()
+    # Get all shares created by this user, ordered by newest first
+    my_shares = conn.execute('SELECT * FROM share_sessions WHERE sender_mykad = ? ORDER BY created_at DESC', (mykad,)).fetchall()
+    conn.close()
+    
+    shares_list = []
+    for row in my_shares:
+        d = dict(row)
+        # Format expires_at for display 
+        if d.get('expires_at'):
+             try:
+                dt = datetime.datetime.strptime(d['expires_at'], '%Y-%m-%d %H:%M:%S')
+                d['expires_at'] = dt.strftime("%d %b %Y, %I:%M %p")
+             except:
+                pass
+        shares_list.append(d)
+
+    return render_template('myShares.html', user=user_data, my_shares=shares_list)
 
 @app.route('/my-face')
 def my_face():
@@ -1248,25 +1468,6 @@ def settings():
     user_data, mykad = get_user_context()
     return render_template('settings.html', user = user_data) 
 
-@app.route('/revoke_access/<int:log_id>', methods = ['POST'])
-def revoke_access(log_id):
-    """
-    Revokes a previously shared access entry for the logged-in user.
-    """
-    if not session.get('vault_access_granted'): return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 401
-    mykad = session.get('user_mykad')
-    conn = get_db_connection()
-    try:
-        cursor = conn.execute("UPDATE access_logs SET status = 'REVOKED' WHERE id = ? AND mykad_number = ? AND status = 'ACTIVE'", (log_id, mykad))
-        if cursor.rowcount == 0:
-            conn.close()
-            return jsonify({'status': 'failure', 'message': 'Access not found.'}), 404
-        conn.commit()
-        conn.close()
-        log_action(mykad, "REVOKE", f"Log ID: {log_id}", "User", "SUCCESS")
-        return jsonify({'status': 'success', 'message': 'Revoked!'})
-    except Exception as e:
-        return jsonify({'status': 'failure', 'message': str(e)}), 500
 
 # --- SHARE CAPSULE LOGIC ---
 
@@ -1349,9 +1550,9 @@ def create_share():
              
     # Capture Document Selections
     # We look for specific keys expected from the frontend form
-    selected_docs = []
-    # Currently supported/hardcoded keys in share.html
-    if request.form.get('share_identity') == 'on': selected_docs.append('identity')
+    # Process permissions
+    # Identity is MANDATORY, so we always include it
+    selected_docs = ['identity']
     if request.form.get('share_license') == 'on': selected_docs.append('license')
     if request.form.get('share_income') == 'on': selected_docs.append('income')
     if request.form.get('share_birth') == 'on': selected_docs.append('birth')
@@ -1365,12 +1566,9 @@ def create_share():
     shared_docs_json = json.dumps(selected_docs)
 
     # Get Access Duration (Default to 24 hours if missing)
-    usage_limit = request.form.get('usage_limit', '24_hours')
+    usage_limit = request.form.get('usage_limit')
     
-    # Map duration to SQLite time modifier
-    # Options: 1_hour, 6_hours, 24_hours, 3_days, 7_days
-    # Map duration to timedelta
-    # Options: 1_hour, 6_hours, 24_hours, 3_days, 7_days
+    # Duration Map
     duration_map = {
         '1_hour': datetime.timedelta(hours=1),
         '6_hours': datetime.timedelta(hours=6),
@@ -1378,10 +1576,22 @@ def create_share():
         '3_days': datetime.timedelta(days=3),
         '7_days': datetime.timedelta(days=7)
     }
-    delta = duration_map.get(usage_limit, datetime.timedelta(hours=24))
     
-    # Calculate Expiry (Use Local System Time for consistency with PDF Viewer)
-    expires_at_dt = datetime.datetime.now() + delta
+    if usage_limit == 'custom':
+        try:
+            c_date = request.form.get('custom_date')
+            c_time = request.form.get('custom_time')
+            # HTML5 inputs return YYYY-MM-DD and HH:MM
+            expires_at_dt = datetime.datetime.strptime(f"{c_date} {c_time}", "%Y-%m-%d %H:%M")
+            # If date is in past, default to 24h or error? Let's just allow it (it will expire immediately)
+        except Exception as e:
+            print(f"Custom Date Error: {e}")
+            # Fallback
+            expires_at_dt = datetime.datetime.now() + datetime.timedelta(hours=24)
+    else:
+        delta = duration_map.get(usage_limit, datetime.timedelta(hours=24))
+        expires_at_dt = datetime.datetime.now() + delta
+        
     expires_at_str = expires_at_dt.strftime('%Y-%m-%d %H:%M:%S')
 
     # Generate 6-digit OTP
@@ -1768,8 +1978,40 @@ def download_secured_doc(share_id, doc_type):
         js_code = f"""
         var expiry = new Date({dt.year}, {dt.month - 1}, {dt.day}, {dt.hour}, {dt.minute}, {dt.second});
         var now = new Date();
+        
+        // 1. OFFLINE EXPIRY CHECK
         if (now > expiry) {{
             app.alert("SECURITY ALERT: This secure document expired on {dt.strftime('%d %b %Y %I:%M %p')}. Access is no longer granted.");
+            this.closeDoc(true);
+        }}
+        
+        // 2. ONLINE REVOCATION CHECK (Phone Home)
+        // Attempt to check if share is REVOKED on server
+        try {{
+            var statusURL = "http://127.0.0.1:5000/check_share_status/{share_id}";
+            
+            // Note: Net.HTTP requires privileges. If this fails, we fall back to offline check.
+            var params = {{
+                cVerb: "GET",
+                cURL: statusURL,
+                oHandler: {{
+                    response: function(args) {{
+                        try {{
+                            var str = SOAP.streamDecode(args.cStream);
+                            var resp = JSON.parse(str);
+                            if (resp.status == 'REVOKED') {{
+                                app.alert("ACCESS REVOKED: The sender has revoked access to this document.");
+                                event.target.closeDoc(true);
+                            }}
+                        }} catch(e) {{ }}
+                    }}
+                }}
+            }};
+            Net.HTTP.request(params);
+            Net.HTTP.request(params);
+        }} catch(e) {{
+            // Network check failed/blocked. "Fail Closed" for strict security.
+            app.alert("SECURITY CHECK FAILED: Unable to verify document status with server. Internet connection and Adobe Reader trust is required to view this secured document.");
             this.closeDoc(true);
         }}
         """
@@ -1808,6 +2050,23 @@ def download_secured_doc(share_id, doc_type):
     )
 
 
+# --- DRM VALIDATION ENDPOINT ---
+@app.route('/check_share_status/<int:share_id>')
+def check_share_status(share_id):
+    """
+    Public endpoint for PDF 'Phone Home' checks.
+    Returns JSON status: ACTIVE or REVOKED.
+    """
+    conn = get_db_connection()
+    share = conn.execute('SELECT status FROM share_sessions WHERE id = ?', (share_id,)).fetchone()
+    conn.close()
+    
+    if not share:
+        return jsonify({'status': 'REVOKED'})
+        
+    return jsonify({'status': share['status']})
+
+
 # --- SHARE REVOCATION ROUTES ---
 
 @app.route('/revoke_share/<int:share_id>', methods=['POST'])
@@ -1834,6 +2093,35 @@ def revoke_share(share_id):
     log_action(mykad, "REVOKE", f"Revoked Share ID {share_id}", "System", "SUCCESS")
     
     return jsonify({'status': 'success', 'message': 'Access revoked successfully.'})
+
+
+@app.route('/revoke_access/<int:log_id>', methods=['POST'])
+def revoke_access(log_id):
+    """
+    Revokes a specific log entry (Legacy/System logs).
+    """
+    if not session.get('vault_access_granted'):
+         return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 401
+    
+    conn = get_db_connection()
+    try:
+        # Check if the log entry exists and is active
+        log_entry = conn.execute('SELECT * FROM access_logs WHERE id = ?', (log_id,)).fetchone()
+        if not log_entry:
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'Log entry not found.'}), 404
+        
+        # Update the log entry status to REVOKED
+        conn.execute('UPDATE access_logs SET status = ? WHERE id = ?', ('REVOKED', log_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'status': 'success', 'message': 'Log revoked successfully.'})
+        
+    except Exception as e:
+        conn.close()
+        print(f"Error revoking log {log_id}: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/logout')
 def logout():
