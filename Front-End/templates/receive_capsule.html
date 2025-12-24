@@ -341,7 +341,8 @@
             <label class="label" id="senderIdLabel">Sender MyKad Number</label>
             <div class="fancy-input-group">
                 <i class="fas fa-id-card" id="idIcon"></i>
-                <input type="text" name="sender_id" id="senderIdInput" placeholder="e.g. 123456-78-1234" required>
+                <input type="text" name="sender_id" id="senderIdInput" class="mykad-format"
+                    placeholder="e.g. 123456-78-1234" required>
             </div>
         </div>
 
@@ -548,6 +549,9 @@
         const input = document.getElementById('senderIdInput');
         const icon = document.getElementById('idIcon');
 
+        // Reset formatting class
+        input.classList.remove('mykad-format');
+
         if (type === "") {
             group.style.display = 'none';
             return;
@@ -559,6 +563,7 @@
             label.innerText = 'Sender MyKad Number';
             input.placeholder = 'e.g. 123456-78-1234';
             icon.className = 'fas fa-id-card';
+            input.classList.add('mykad-format'); // Enable auto-hyphen
         } else if (type === 'Government') {
             label.innerText = 'Agency ID';
             input.placeholder = 'e.g. JPN-8821';

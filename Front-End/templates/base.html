@@ -541,6 +541,31 @@
         document.onscroll = resetTimers;
     </script>
 
+
+    <script>
+        // GLOBAL MYKAD FORMATTER
+        document.addEventListener('input', function (e) {
+            if (e.target.classList.contains('mykad-format')) {
+                // 1. Remove non-digits
+                let start = e.target.selectionStart; // Cursor position tracking
+                let raw = e.target.value.replace(/\D/g, '');
+
+                // 2. Limit to 12 digits
+                if (raw.length > 12) raw = raw.substring(0, 12);
+
+                // 3. Format XXXXXX-XX-XXXX
+                let fmt = raw;
+                if (raw.length > 6) {
+                    fmt = raw.substring(0, 6) + '-' + raw.substring(6);
+                }
+                if (raw.length > 8) {
+                    fmt = fmt.substring(0, 9) + '-' + fmt.substring(9);
+                }
+
+                e.target.value = fmt;
+            }
+        });
+    </script>
 </body>
 
 </html>

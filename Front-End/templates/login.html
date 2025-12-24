@@ -201,7 +201,8 @@
 
             <form onsubmit="handleLogin(event)">
                 <label for="ic-number">MyKad / ID Number</label>
-                <input type="text" id="ic-number" name="ic-number" placeholder="ID number" required autocomplete="on">
+                <input type="text" id="ic-number" name="ic-number" class="mykad-format" placeholder="ID number" required
+                    autocomplete="on">
 
                 <label for="password">System Password</label>
                 <input type="password" id="password" name="password" placeholder="Password" required
@@ -219,6 +220,18 @@
     </div>
 
     <script>
+        // FORM VALIDATION SCRIPT (Inline for Login Page)
+        document.addEventListener('input', function (e) {
+            if (e.target.classList.contains('mykad-format')) {
+                let raw = e.target.value.replace(/\D/g, '');
+                if (raw.length > 12) raw = raw.substring(0, 12);
+                let fmt = raw;
+                if (raw.length > 6) fmt = raw.substring(0, 6) + '-' + raw.substring(6);
+                if (raw.length > 8) fmt = fmt.substring(0, 9) + '-' + fmt.substring(9);
+                e.target.value = fmt;
+            }
+        });
+
         // --- 1. HANDLE LOGIN SUBMISSION (AJAX) ---
         function handleLogin(event) {
             event.preventDefault(); // Stop page reload

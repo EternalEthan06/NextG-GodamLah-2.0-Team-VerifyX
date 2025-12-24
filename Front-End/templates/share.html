@@ -371,16 +371,22 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%) rotate(-30deg);
-        font-size: 80px;
+        font-size: 30px;
+        /* Smaller base size */
         font-weight: 900;
-        color: rgba(0, 0, 0, 0.08);
-        border: 8px solid rgba(0, 0, 0, 0.08);
-        padding: 10px 40px;
-        border-radius: 20px;
+        color: rgba(0, 0, 0, 0.06);
+        border: 4px solid rgba(0, 0, 0, 0.06);
+        padding: 15px 30px;
+        border-radius: 12px;
         pointer-events: none;
-        white-space: nowrap;
+        white-space: normal;
+        /* Allow wrapping */
+        text-align: center;
+        width: 80%;
+        max-width: 400px;
         z-index: 0;
         user-select: none;
+        line-height: 1.25;
     }
 </style>
 {% endblock %}
@@ -415,7 +421,8 @@
                 <label class="section-label" id="recipientLabel">Recipient ID</label>
                 <div class="fancy-input-group">
                     <i class="fas fa-id-card-clip"></i>
-                    <input type="text" name="recipient_id" id="recipientId" placeholder="Enter ID...">
+                    <input type="text" name="recipient_id" id="recipientId" class="mykad-format"
+                        placeholder="Enter ID...">
                 </div>
             </div>
 
@@ -547,7 +554,8 @@
     <div class="preview-panel">
         <div class="doc-sheet" id="preview-area">
 
-            <div class="watermark-big">PREVIEW</div>
+            <div class="watermark-big">PROPERTY OF<br>{{ user.full_name |
+                upper }}</div>
             <label class="section-label"
                 style="position: absolute; bottom: 15px; left: 20px; z-index: 10; background: white; padding: 2px 8px; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                 Live Preview
@@ -652,10 +660,14 @@
         const label = document.getElementById('recipientLabel');
         const input = document.getElementById('recipientId');
 
+        // Reset formatting class first
+        input.classList.remove('mykad-format');
+
         if (type === 'Individual') {
             group.style.display = 'block';
             label.innerText = 'Recipient MyKad Number';
             input.placeholder = 'e.g. 123456-78-1234';
+            input.classList.add('mykad-format'); // Enable auto-hyphen
         } else if (type === 'Government') {
             group.style.display = 'block';
             label.innerText = 'Agency Code';
@@ -918,58 +930,159 @@
 </script>
 
 <!-- SCREENSHOT DETERRENCE & SECURITY -->
-<div id="security-overlay"
-    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:999999; align-items:center; justify-content:center; flex-direction:column;">
-    <div style="font-size:50px; color:#ef4444;"><i class="fas fa-eye-slash"></i></div>
-    <h2 style="color:white; margin-top:20px;">Security Mode Active</h2>
-    <p style="color:#aaa; margin-bottom:30px;">Screenshot attempt or window switch detected.</p>
-    <button onclick="resumeSession()"
-        style="padding:10px 20px; background:white; color:black; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">Click
-        to Resume</button>
-</div>
+<!-- Removed static HTML overlay to prevent nesting issues. Injected via JS below. -->
+
 
 <script>
+    // PRE-INJECT OVERLAY (New Buttonless Glow Design - Blue Lock)
+    const overlayHTML = `
+    <style>
+        @keyframes border-pulse {
+            0% { border-color: rgba(59, 130, 246, 0.3); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.1); }
+            50% { border-color: rgba(59, 130, 246, 0.8); box-shadow: 0 0 30px 0 rgba(59, 130, 246, 0.25); }
+            100% { border-color: rgba(59, 130, 246, 0.3); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.1); }
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            padding: 50px;
+            border-radius: 24px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 400px;
+            width: 85%;
+            margin: auto;
+            text-align: center;
+            animation: border-pulse 3s infinite ease-in-out;
+        }
+    </style>
+    <div id="security-overlay" style="opacity:0; pointer-events:none; position:fixed; inset:0; width:100%; height:100%; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index:2147483647; display:flex !important; align-items:center !important; justify-content:center !important; transition: opacity 0.2s ease;">
+        <div class="glass-card">
+            <div style="margin-bottom: 25px;">
+                <i class="fas fa-lock" style="font-size: 50px; color: #3b82f6; filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.5));"></i>
+            </div>
+            <h2 style="color:white; font-size: 20px; font-weight: 700; margin: 0 0 10px 0; letter-spacing: 0.5px; font-family:'Segoe UI', sans-serif;">Security Active</h2>
+            <p style="color:#94a3b8; font-size: 13px; margin: 0; line-height: 1.6; font-family:'Segoe UI', sans-serif;">
+                Protected view.<br>Auto-resumes when active.
+            </p>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('afterbegin', overlayHTML);
+
     // AGGRESSIVE PROTECTION
     const overlay = document.getElementById('security-overlay');
+    // NOTE: On share.html, we don't have a single 'capsule-content-area', so we blur the body or container
+    const content = document.querySelector('.container');
+
+    // ULTRA-RELIABLE AUTO-RESUME
+    overlay.addEventListener('click', resumeSession);
+    overlay.addEventListener('mousemove', resumeSession);
 
     function activateSecurity() {
-        overlay.style.display = 'flex';
+        // INSTANT HIDE (Opacity is faster than Blur)
+        if (content) {
+            content.style.opacity = '0';
+            content.style.filter = 'blur(20px)';
+        }
+
+        overlay.style.opacity = '1';
+        overlay.style.pointerEvents = 'auto';
         document.body.style.overflow = 'hidden';
     }
 
     function resumeSession() {
-        overlay.style.display = 'none';
-        document.body.style.filter = 'none';
+        overlay.style.opacity = '0';
+        overlay.style.pointerEvents = 'none';
+
+        if (content) {
+            content.style.opacity = '1';
+            content.style.filter = 'none';
+        }
+
         document.body.style.overflow = 'auto';
     }
 
-    // 1. WINDOW FOCUS (Snipping Tool Click / Alt-Tab)
+    /* --- TRIGGER ZONES --- */
+
+    // 0. AGGRESSIVE POLLING (Failsafe)
+    setInterval(() => {
+        // If not focused and hidden, lock it.
+        // But if focused, ensure we are resumed (failsafe for stuck states)
+        if (!document.hasFocus() && document.hidden) {
+            activateSecurity();
+        }
+    }, 500);
+
+    // 1. WINDOW FOCUS/BLUR (Auto-Protect & Auto-Resume)
     window.addEventListener('blur', () => {
         activateSecurity();
         document.title = "Protected - Hidden";
     });
 
-    // 2. MOUSE LEAVE (Anticipate clicking outside)
-    document.addEventListener('mouseleave', () => {
-        document.body.style.filter = 'blur(10px)'; // Warning blur
+    window.addEventListener('focus', () => {
+        // Auto-resume when user clicks back into the window or Alt-Tabs back
+        resumeSession();
+        document.title = "Share Capsule | VerifyX";
     });
 
+    // 2. MOUSE LEAVE (Detects moving mouse to Snipping Tool / Taskbar)
+    document.addEventListener('mouseleave', () => {
+        activateSecurity();
+    });
+
+    // 2b. MOUSE ENTER (Auto-Resume when mouse comes back)
     document.addEventListener('mouseenter', () => {
-        if (overlay.style.display === 'none') {
-            document.body.style.filter = 'none';
+        resumeSession();
+    });
+
+    // 1b. VISIBILITY CHANGE
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            activateSecurity();
+        } else {
+            // Auto-resume when tab becomes visible again
+            resumeSession();
         }
     });
+
+    window.addEventListener('resize', () => {
+        if (!document.hasFocus()) activateSecurity();
+    });
+
+    // 1c. DISABLE RIGHT CLICK
+    document.addEventListener('contextmenu', event => event.preventDefault());
 
     // 3. KEYBOARD SHORTCUTS
     document.addEventListener('keydown', function (e) {
+        // META KEY (Start Menu / Search)
         if (e.key === 'Meta' || e.key === 'os') {
             activateSecurity();
         }
+
+        // PrintScreen
         if (e.key === 'PrintScreen') {
             activateSecurity();
-            alert("Screenshots are prohibited!");
+            // Attempt to clear clipboard
+            try { navigator.clipboard.writeText('Protected Content'); } catch (err) { }
         }
-        if (e.ctrlKey && (['p', 's', 'S'].includes(e.key) || (e.shiftKey && ['s', 'S'].includes(e.key)))) {
+
+        // Ctrl + Shift + S (Snipping Tool Shortcut)
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            activateSecurity();
+        }
+
+        // Shift + Meta + S (Windows Snipping Tool - often blocked but worth trying)
+        if (e.shiftKey && (e.key === 'Meta' || e.key === 'os') && e.key.toLowerCase() === 's') {
+            activateSecurity();
+        }
+
+        // Ctrl+P / Ctrl+S
+        if (e.ctrlKey && (['p', 's'].includes(e.key.toLowerCase()))) {
             e.preventDefault();
             activateSecurity();
         }
