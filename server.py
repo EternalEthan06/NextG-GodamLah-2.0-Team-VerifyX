@@ -447,9 +447,13 @@ def handle_login():
             
             # --- PERSISTENT ENROLLMENT CHECK ---
             # Use explicit flag from DB
-            if user_record['is_enrollment_complete']:
-                session['is_enrolled'] = True
-            else:
+            # Safe access with .get() or dict() conversion to handle missing/null columns
+            try:
+                # Check if enrollment is complete (handles 0, 1, or None)
+                enrollment_status = user_record['is_enrollment_complete'] if 'is_enrollment_complete' in user_record.keys() else 0
+                session['is_enrolled'] = bool(enrollment_status)
+            except (KeyError, IndexError):
+                # Fallback: If column doesn't exist, assume not enrolled
                 session['is_enrolled'] = False
             
             # 3. Log Audit Trail 
@@ -937,45 +941,45 @@ def issue_certificate():
 
     target_mykad = request.form.get('mykad')
     
-    # 1. Fetch Citizen
+    # Use a single database connection for all operations
     with get_db() as conn:
+        # 1. Fetch Citizen
         user = conn.execute('SELECT full_name FROM citizens WHERE mykad_number = ?', (target_mykad,)).fetchone()
-    
-    if not user:
-        return jsonify({'status': 'failure', 'message': 'Citizen not found'})
+        
+        if not user:
+            return jsonify({'status': 'failure', 'message': 'Citizen not found'})
 
-    # 2. Construct Certificate Data
-    cert_data = {
-        "type": "BIRTH_CERTIFICATE",
-        "mykad": target_mykad,
-        "name": user['full_name'],
-        "issuer": "JPN MALAYSIA",
-        "date_issued": datetime.datetime.now().isoformat()
-    }
+        # 2. Construct Certificate Data
+        cert_data = {
+            "type": "BIRTH_CERTIFICATE",
+            "mykad": target_mykad,
+            "name": user['full_name'],
+            "issuer": "JPN MALAYSIA",
+            "date_issued": datetime.datetime.now().isoformat()
+        }
 
-    # 3. Layer 2: Sign Data
-    signature = signer.sign_data(cert_data)
+        # 3. Layer 2: Sign Data
+        signature = signer.sign_data(cert_data)
 
-    # 4. Layer 1: Anchor to Merkle Tree
-    # Create a hash of the signed package to be the leaf
-    leaf_content = json.dumps(cert_data) + signature
-    merkle_root = merkle_tree.add_leaf(leaf_content)
+        # 4. Layer 1: Anchor to Merkle Tree
+        # Create a hash of the signed package to be the leaf
+        leaf_content = json.dumps(cert_data) + signature
+        merkle_root = merkle_tree.add_leaf(leaf_content)
 
-    # 5. Create Final Package
-    final_package = {
-        "data": cert_data,
-        "signature": signature,
-        "merkle_root": merkle_root, 
-        "verification_status": "SECURED"
-    }
-    
-    final_json = json.dumps(final_package)
+        # 5. Create Final Package
+        final_package = {
+            "data": cert_data,
+            "signature": signature,
+            "merkle_root": merkle_root, 
+            "verification_status": "SECURED"
+        }
+        
+        final_json = json.dumps(final_package)
 
-    # 6. Store in DB (Simulating issuance)
-    # We overwrite the 'birth_cert_enc' column which was previously just a string
-    conn.execute('UPDATE citizens SET birth_cert_enc = ? WHERE mykad_number = ?', (final_json, target_mykad))
-    conn.commit()
-    conn.close()
+        # 6. Store in DB (Simulating issuance)
+        # We overwrite the 'birth_cert_enc' column which was previously just a string
+        conn.execute('UPDATE citizens SET birth_cert_enc = ? WHERE mykad_number = ?', (final_json, target_mykad))
+        conn.commit()
 
     # 7. Log
     log_action(target_mykad, "ISSUANCE", "Birth Cert Issued (L1+L2)", "JPN", "SUCCESS")
