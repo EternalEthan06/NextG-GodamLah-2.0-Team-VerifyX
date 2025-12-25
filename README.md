@@ -18,12 +18,11 @@ Secure Liveliness Portal (SLP-ID) employs a powerful 2-of-4 Multi-Factor Biometr
 We go beyond simple facial scans. Every biometric verification step includes Liveliness Detection to prevent fraud and spoofing attempts.
 
 - This system actively verifies that the person presenting the biometric sample is a real, live human being, not a photograph, video replay, or deepfake.
-
 - It protects against unauthorized access using static images or recordings.
 
 ### 2. Multi-Factor Biometric Enrollment (MFA)
 
-Users enroll and authenticate using a combination of methods. For vault access, the user must successfully pass **two of the three** chosen biometric verification methods, providing an extra layer of defense beyond traditional 2FA. 
+Users enroll and authenticate using a combination of methods. For vault access, the user must successfully pass **two of the three** chosen biometric verification methods, providing an extra layer of defense beyond traditional 2FA. **The face used for recognition must match the face performing the biometric test.**
 
 | Biometric Method | Purpose |
 | :--- | :--- |
@@ -37,7 +36,11 @@ Users enroll and authenticate using a combination of methods. For vault access, 
 * **Secure Login:** User credentials are authenticated against industry-standard, securely generated, and salted password hashes using `werkzeug.security`.
 * **Encrypted Data:** Core documents are encrypted-at-rest within the database using a cryptographic cipher (e.g., Fernet/AES), ensuring data remains unintelligible even if the database is compromised.
 
-### 4. Transparent Access Logging and Revocation
+### 4. Advanced Backend Security Layers
+* **Layer 1: Merkle Anchors:** Implemented for data integrity.
+* **Layer 2: Digital Signatures:** Implemented for authenticity verification.
+
+### 5. Transparent Access Logging and Revocation
 
 Every action, whether a user login, an upload, a document share, or a failed authentication attempt, is recorded in a tamper-proof **`access_logs`** table.
 
@@ -82,34 +85,51 @@ The My Files page displays all verified, encrypted documents belonging to the us
 - Secure modal preview  
 - Agency verification seals  
 - Meta details (updated date, issuer, type)
+- **Screenshot Lock:** Added mechanism to prevent unauthorized screenshots during viewing.
+![My Files](uploads/screenshots/prevent-screenshot.png)
+- **Verify Authenticity:** User can press the "Verify Validity" button from the Merkle anchor to check and receive a verification badge.
+    *   **Action:** Server checks the cryptographic signature of the owner against the Issuer Public Key.
 
 ![My Files](uploads/screenshots/my-files.png)
 
 
-## 🔷 3. Permissions (P2V Share Capsule)
+## 🔷 3. Share & Receive Capsule (P2V Share Capsule)
 
 This page allows users to create **Share Capsules**, which grant time-bound, permission-restricted access to third parties.
 
-### **Key Features**
-- Choose which documents to share  
-- Select recipient organisation  
-- Set access start & end times  
-- Real-time dynamic preview of each document  
-- Submit Share Capsule (logged as ACTIVE)
-
+### **Key Features: Share Capsule**
+1.  **Select Recipient:** Choose between Individual, Government Department, or Private Agency.
+    *   For Individual: Enter IC.
+    *   For Agency: Enter Agency Code.
+2.  **Select Files:** Choose which documents to share and set access duration.
+3.  **Generate Share Capsule:** Create QR code and share code.
+    *   **Access Control:** User can select access duration and whether to allow download or restrict to view-only.
+4.  **QR Code Display:** Code Generated (Refresh every 60s).
+5.  **Multi-File Sharing:** Support for sharing multiple documents in a single capsule.
 ![Permissions (P2V)](uploads/screenshots/share-capsule.png)
+
+### **Key Features: Receive Capsule**
+1.  **Enter Sender Details:** Enter Sender IC.
+2.  **Access Method:** Enter the code or Scan QR.
+![Permissions (P2V)](uploads/screenshots/receive-capsule.png)
+3.  **Secure Access:** Receiver views a secured PDF locked with a system-generated password (Time-locked: PDF not accessible after the period set in the share capsule).
+![Permissions (P2V)](uploads/screenshots/received-pdf.png)
+
 
 
 ## 🔷 4. Access Logs
 
 The Access Logs page provides full transparency over how a user’s data is accessed, including real-time revocation controls.
 
-### **Key Features**
-- Complete historical audit trail  
-- Status indicators (ACTIVE, REVOKED, FAILED, etc.)  
-- Organisation icons and access context  
-- “Revoke Access” kill switch  
-- Instant UI update through AJAX
+### **Key Features: My Shared Access**
+- View shares that were successful.
+- History of who accessed/downloaded.
+
+### **Key Features: My Access Control**
+- Complete historical audit trail.
+- Status indicators (ACTIVE, REVOKED, FAILED, etc.).
+- "Revoke Access" kill switch.
+- Instant UI update through AJAX.
 
 ![Access Logs](uploads/screenshots/access-logs.png)
 
@@ -127,7 +147,24 @@ The Settings page allows users to manage their profile, security preferences, an
 
 ![Settings](uploads/screenshots/settings.png)
 
+## 🔷 6. Issuer Portal (JPN Mock)
 
+A dedicated portal for "JPN" to issue documents, designed for demonstration purposes. **Note: JPN only issues Birth Certificates for this demo.**
+
+*   **Mock Credentials:**
+    *   **MyKad:** `mockjpn`
+    *   **Password:** `password123`
+*   **Features:**
+    *   **Issuer Dashboard:** Search and Bulk Issuance.
+    *   **Edit Certificate:** Page with live preview.
+    *   **Logs:** History log and action log.
+    *   *Issuer login bypasses biometric checks for this demo.*
+
+### **Security Implementation (Layer 1 & 2)**
+*   **Layer 1 (Merkle Anchors):** Ensures data integrity by anchoring document hashes to a Merkle Tree. Any alteration to the document content invalidates the anchor.
+*   **Layer 2 (Digital Signatures):** Ensures authenticity. Documents are cryptographically signed by the issuer (JPN) using their private key. The "Verify Validity" feature verifies this signature against the issuer's public key to confirm the document's origin.  
+![Issuer Portal](uploads/screenshots/issuer-dashboard.png)
+![Issuer Portal](uploads/screenshots/issuer-edit.png)
 ---
 ## 🚀 Getting Started
 
@@ -136,8 +173,7 @@ To run this project locally and test the features:
 ### Step 1: Clone the Repository
 
 ```bash
-# Assuming you have resolved the Git push issue and are ready to push
-git clone [https://github.com/EternalEthan06/NextG-GodamLah-2.0-Team-VerifyX.git](https://github.com/EternalEthan06/NextG-GodamLah-2.0-Team-VerifyX.git)
+git clone https://github.com/EternalEthan06/NextG-GodamLah-2.0-Team-VerifyX.git
 
 cd NextG-GodamLah-2.0-Team-VerifyX
 ```
@@ -165,6 +201,16 @@ python server.py
 Open your browser and navigate to the login page: http://127.0.0.1:5000/login
 
 **Test Credentials:**
-- **MyKad: 981225-14-5521**
+- **User Login:**
+    - **MyKad:** 981225-14-5521
+    - **Password:** password123
 
-- **Password: password123**
+- **Issuer (JPN) Login:**
+    - **MyKad:** mockjpn
+    - **Password:** password123
+
+---
+**Authors:**
+- Lee Jasmin
+- Ethan Tiang Yong Xuan
+- Chloe Lai Phui Yan
