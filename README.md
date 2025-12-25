@@ -116,7 +116,6 @@ This page allows users to create **Share Capsules**, which grant time-bound, per
 ![Permissions (P2V)](uploads/screenshots/received-pdf.png)
 
 
-
 ## 🔷 4. Access Logs
 
 The Access Logs page provides full transparency over how a user’s data is accessed, including real-time revocation controls.
