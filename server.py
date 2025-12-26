@@ -41,6 +41,7 @@ encoder = VoiceEncoder()
 print("Voice Model Loaded.")
 
 # --- MEDIAPIPE INITIALIZATION ---
+# --- MEDIAPIPE INITIALIZATION ---
 print("Loading Face Landmarker Model...")
 base_options = python.BaseOptions(model_asset_path='face_landmarker.task')
 options = vision.FaceLandmarkerOptions(base_options=base_options,
@@ -69,6 +70,10 @@ USER_ENROLLED = False
 # --- SESSION TIMEOUT CHECK ---
 @app.before_request
 def check_session_timeout():
+    """
+    Middleware that checks if the user's session has exceeded the idle timeout (5 mins).
+    If timed out, clears the session and redirects to login.
+    """
     # Exempt valid static/auth endpoints to prevent loops
     if request.endpoint in ('login', 'handle_login', 'static', 'serve_gestures', 'check_blink', 'check_pose', 'verify_face', 'verify_voice', 'logout'):
         return
@@ -375,6 +380,10 @@ def register_failure(mykad, reason="FAILED"):
 
 @app.route('/handle_login', methods = ['POST'])
 def handle_login():
+    """
+    Processes the login form submission.
+    Validates MyKad and password, controls lockout logic, and initiates biometric flow.
+    """
     data = request.get_json() 
     mykad = data.get('ic-number', '').strip()
     password = data.get('password', '').strip()
@@ -471,7 +480,6 @@ def handle_login():
     register_failure(None, "Unknown User")
     return jsonify({'status': 'failure', 'message': 'Invalid MyKad or Password.'}), 401
 
-@app.route('/verify-face', methods=['POST'])
 @app.route('/verify-face', methods=['POST'])
 def verify_face():
     """
@@ -580,9 +588,6 @@ def verify_face():
     except Exception as e:
         print(f"Face Error: {e}")
         return jsonify({'status': 'failure', 'message': 'Error processing face biometrics.'}), 500
-
-
-
 
 @app.route('/verify-voice', methods = ['POST'])
 def verify_voice():
@@ -705,6 +710,9 @@ def verify_voice():
 
 @app.route('/gestures/<path:filename>')
 def serve_gestures(filename):
+    """
+    Serves static gesture reference images for the biometric verification step.
+    """
     return send_from_directory('gestures', filename)
 
 @app.route('/verify-identity')
@@ -919,6 +927,10 @@ def step_complete():
 # --- ISSUER PORTAL ---
 @app.route('/issuer/dashboard')
 def issuer_dashboard():
+    """
+    Displays the dashboard for JPN officers (Issuers).
+    Shows recent logs and a list of citizens for management.
+    """
     if session.get('user_mykad') != 'mockjpn':
         return redirect(url_for('login'))
     
@@ -936,6 +948,10 @@ def issuer_dashboard():
 
 @app.route('/issuer/issue', methods=['POST'])
 def issue_certificate():
+    """
+    API to issue a Standard Birth Certificate to a specific user.
+    Simulates the generation, signing (Layer 2), and anchoring (Layer 1) of the document.
+    """
     if session.get('user_mykad') != 'mockjpn':
         return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 403
 
@@ -988,6 +1004,9 @@ def issue_certificate():
 
 @app.route('/issuer/issue-bulk', methods=['POST'])
 def issue_certificate_bulk():
+    """
+    API to issue certificates to multiple users at once.
+    """
     if session.get('user_mykad') != 'mockjpn':
         return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 403
 
@@ -1066,6 +1085,10 @@ def issue_certificate_bulk():
 
 @app.route('/issuer/edit/<mykad>')
 def issue_certificate_edit_page(mykad):
+    """
+    Displays the edit form for issuing a custom certificate.
+    Pre-fills data if an existing certificate is found.
+    """
     if session.get('user_mykad') != 'mockjpn':
         return redirect(url_for('login'))
         
@@ -1112,6 +1135,9 @@ def issue_certificate_edit_page(mykad):
 
 @app.route('/issuer/issue-custom', methods=['POST'])
 def issue_certificate_custom():
+    """
+    API to issue a certificate with custom details provided via form.
+    """
     if session.get('user_mykad') != 'mockjpn':
         return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 403
 
@@ -1164,6 +1190,9 @@ def issue_certificate_custom():
 
 @app.route('/issuer/api/history/<mykad>')
 def get_citizen_history(mykad):
+    """
+    API to fetch the full transaction history of a specific citizen.
+    """
     if session.get('user_mykad') != 'mockjpn':
         return jsonify({'status': 'failure', 'message': 'Unauthorized'}), 403
         
@@ -1191,6 +1220,9 @@ def get_citizen_history(mykad):
 
 @app.route('/issuer/logs')
 def issuer_logs_page():
+    """
+    Displays the audit logs specific to JPN organization actions.
+    """
     if session.get('user_mykad') != 'mockjpn':
         return redirect(url_for('login'))
         
@@ -1216,6 +1248,10 @@ def issuer_logs_page():
 # --- VERIFICATION ENDPOINT (For Citizen Button) ---
 @app.route('/verify-document')
 def verify_document():
+    """
+    Validates a document's cryptographic signature (Layer 2) and Merkle Proof (Layer 1).
+    Used by the frontend 'Verify Integrity' button.
+    """
     doc_type = request.args.get('type')
     
     # We currently only support birth_cert for this demo
@@ -1271,6 +1307,10 @@ def dashboard():
 
 @app.route('/files')
 def my_files_entry():
+    """
+    Displays the 'My Files' vault.
+    Verifies the user has passed all biometric checks before showing sensitive documents.
+    """
     if not session.get('vault_access_granted'):
         return redirect(url_for('dashboard', alert='verification_failed'))
     
@@ -1400,7 +1440,23 @@ def access_log():
     # 2. Fetch User's Created Shares
     conn = get_db_connection()
     # Get all shares created by this user, ordered by newest first
-    my_shares = conn.execute('SELECT * FROM share_sessions WHERE sender_mykad = ? ORDER BY created_at DESC', (mykad,)).fetchall()
+    # [UPDATED] SQL-Based Filter (Strict Matching) - Same as my_shares_list
+    # Only select share sessions where an access log entry exists referencing their ID
+    query = '''
+        SELECT DISTINCT s.* 
+        FROM share_sessions s
+        WHERE s.sender_mykad = ?
+        AND EXISTS (
+            SELECT 1 FROM access_logs a 
+            WHERE a.mykad_number = s.sender_mykad 
+            AND (
+                a.context = 'Guest accessed Share:' || s.id 
+                OR a.context LIKE 'ShareID:' || s.id || ' -%'
+            )
+        )
+        ORDER BY s.created_at DESC
+    '''
+    my_shares = conn.execute(query, (mykad,)).fetchall()
     conn.close()
     
     shares_list = []
@@ -1429,10 +1485,30 @@ def my_shares_list():
     
     conn = get_db_connection()
     # Get all shares created by this user, ordered by newest first
-    my_shares = conn.execute('SELECT * FROM share_sessions WHERE sender_mykad = ? ORDER BY created_at DESC', (mykad,)).fetchall()
-    conn.close()
-    
     shares_list = []
+    
+    # [UPDATED] SQL-Based Filter (Strict Matching)
+    # We use specific patterns to avoid "1 matches 10" issues.
+    # 1. Redemption Log: "Guest accessed Share:<id>" (Exact string usually)
+    # 2. View Log: "ShareID:<id> - Accessed..." (Followed by ' -')
+    query = '''
+        SELECT DISTINCT s.* 
+        FROM share_sessions s
+        WHERE s.sender_mykad = ?
+        AND EXISTS (
+            SELECT 1 FROM access_logs a 
+            WHERE a.mykad_number = s.sender_mykad 
+            AND (
+                a.context = 'Guest accessed Share:' || s.id 
+                OR a.context LIKE 'ShareID:' || s.id || ' -%'
+            )
+        )
+        ORDER BY s.created_at DESC
+    '''
+    
+    my_shares = conn.execute(query, (mykad,)).fetchall()
+    conn.close()
+
     for row in my_shares:
         d = dict(row)
         # Format expires_at for display 
@@ -1615,7 +1691,7 @@ def create_share():
         conn.commit()
         conn.close()
         
-        log_action(mykad, "SHARE", f"Created Capsule ({usage_limit}) for {recipient_type}:{recipient_id}", "System", "SUCCESS")
+        # log_action(mykad, "SHARE", f"Created Capsule ({usage_limit}) for {recipient_type}:{recipient_id}", "System", "SUCCESS")
         
         return jsonify({'status': 'success', 'share_id': share_id, 'otp_code': otp_code})
         
@@ -1708,6 +1784,10 @@ def share_status(share_id):
 
 @app.route('/view_capsule_content')
 def view_capsule_content():
+    """
+    Displays the content of a shared capsule to a guest recipient.
+    Validates the guest session and renders the allowed documents.
+    """
     if not session.get('guest_access'):
         return redirect(url_for('receive_capsule'))
         
