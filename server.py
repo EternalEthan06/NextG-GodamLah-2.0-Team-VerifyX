@@ -540,7 +540,7 @@ def verify_face():
             # MIRROR FALLBACK CHECK
             # If normal check fails, try flipping the image horizontally.
             final_distance = distance
-            if distance > 1.15:
+            if distance > 1.0:
                  try:
                      # Re-read image bytes for PIL
                      pil_img = Image.open(io.BytesIO(image_blob)).convert('RGB')
@@ -565,15 +565,15 @@ def verify_face():
             # Determine threshold
             # With normalization, vector magnitude is sensitive to eye-distance jitter (e.g. glasses).
             # A 5% jitter can cause Distance ~ 0.75. 
-            # Relaxing to 1.15 to better handle lens distortion and Z-axis scaling.
-            if final_distance < 1.15:
+            # Lowered to 1.0 for higher security (stricter matching requirement).
+            if final_distance < 1.0:
                 # conn.close() # handled by context manager
-                print(f"DEBUG: MATCH! Dist {final_distance:.4f} < 1.15")
+                print(f"DEBUG: MATCH! Dist {final_distance:.4f} < 1.0")
                 log_action(mykad, "VERIFY", "Face Match Success", "System", "SUCCESS")
                 return jsonify({'status': 'success', 'message': 'Face verified successfully.'})
             else:
                 # conn.close() # handled by context manager
-                print(f"DEBUG: FAILURE! Dist {final_distance:.4f} > 1.15")
+                print(f"DEBUG: FAILURE! Dist {final_distance:.4f} > 1.0")
                 log_action(mykad, "VERIFY", "Face Mismatch", "System", "FAILED")
                 return jsonify({'status': 'failure', 'message': 'Face verification failed. Please try again.'})
 
@@ -823,7 +823,7 @@ def verify_gesture_identity():
         
         # MIRROR FALLBACK CHECK
         # If normal check fails, try flipping the image horizontally.
-        if dist_original > 1.15:
+        if dist_original > 1.0:
              try:
                  # Load original PIL (we need to re-open or if we had it.. we only had bytes. Re-open)
                  pil_img = Image.open(io.BytesIO(image_blob)).convert('RGB')
@@ -849,8 +849,8 @@ def verify_gesture_identity():
                  
         # Threshold similar to verify_face
         # Threshold similar to verify_face
-        # Relaxing to 0.85 to account for hand occlusion/expression changes during gesture
-        if final_distance > 1.15: 
+        # Lowered to 1.0 for higher security (stricter matching requirement)
+        if final_distance > 1.0: 
              log_action(mykad, "GESTURE_VERIFY", f"Face Mismatch (Dist={final_distance:.2f})", "System", "FAILED")
              return jsonify({'status': 'failure', 'message': 'Identity verification failed. Face does not match.'})
 
