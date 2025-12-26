@@ -223,18 +223,7 @@
         // FORM VALIDATION SCRIPT (Inline for Login Page)
         document.addEventListener('input', function (e) {
             if (e.target.classList.contains('mykad-format')) {
-                // Allow special accounts like 'mockjpn' (non-numeric text)
-                // Only apply MyKad formatting if the input contains digits
-                let currentValue = e.target.value;
-                
-                // Check if input contains any letters - if so, allow it as-is (special account)
-                if (/[a-zA-Z]/.test(currentValue)) {
-                    // Don't format, allow text input for special accounts
-                    return;
-                }
-                
-                // Apply MyKad formatting for numeric input
-                let raw = currentValue.replace(/\D/g, '');
+                let raw = e.target.value.replace(/\D/g, '');
                 if (raw.length > 12) raw = raw.substring(0, 12);
                 let fmt = raw;
                 if (raw.length > 6) fmt = raw.substring(0, 6) + '-' + raw.substring(6);
